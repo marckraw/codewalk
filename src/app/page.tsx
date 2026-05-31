@@ -1,6 +1,12 @@
 import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Panel, PanelHeader } from "@/components/ui/panel";
+import { Tabs } from "@/components/ui/tabs";
+import { Toolbar } from "@/components/ui/toolbar";
 import { APP_NAME, REVIEW_TABS } from "@/lib/product";
+import { FileCode2, GitPullRequestArrow, ListChecks, LogIn, MessageSquareText, Route } from "lucide-react";
 
 const previewFiles = [
   { path: "src/app/review/[id]/page.tsx", status: "modified", count: "+84 -17" },
@@ -27,11 +33,24 @@ const guideSections = [
   },
 ];
 
+const tabIcons = {
+  Activity: <MessageSquareText aria-hidden="true" className="size-3.5" />,
+  Overview: <Route aria-hidden="true" className="size-3.5" />,
+  Guide: <ListChecks aria-hidden="true" className="size-3.5" />,
+  Diff: <FileCode2 aria-hidden="true" className="size-3.5" />,
+};
+
+const reviewTabItems = REVIEW_TABS.map((tab) => ({
+  icon: tabIcons[tab],
+  id: tab,
+  label: tab,
+}));
+
 export default function Home() {
   return (
     <main className="min-h-screen">
-      <header className="border-b border-[var(--border)] bg-[var(--panel)]">
-        <div className="flex min-h-14 items-center justify-between gap-3 px-4 py-2 sm:px-6">
+      <header>
+        <Toolbar>
           <div className="flex items-center gap-3">
             <div className="grid size-8 place-items-center rounded-md border border-[var(--border)] bg-[var(--panel-subtle)] text-sm font-semibold">
               C
@@ -44,36 +63,25 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <OpenPullRequestDialog />
             <ThemeModeToggle />
-            <button
-              className="h-9 rounded-md bg-[var(--button)] px-3 text-sm font-medium text-[var(--button-foreground)]"
+            <Button
               type="button"
+              variant="primary"
             >
+              <LogIn aria-hidden="true" className="size-4" />
               Sign in with GitHub
-            </button>
+            </Button>
           </div>
-        </div>
+        </Toolbar>
       </header>
 
       <section className="grid gap-4 px-4 py-4 sm:px-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-        <aside className="rounded-md border border-[var(--border)] bg-[var(--panel)]">
-          <nav className="grid grid-cols-4 border-b border-[var(--border)] text-xs font-medium">
-            {REVIEW_TABS.map((tab) => (
-              <span
-                className="border-r border-[var(--border)] px-2 py-2 text-center last:border-r-0 data-[active=true]:bg-[var(--foreground)] data-[active=true]:text-white"
-                data-active={tab === "Guide"}
-                key={tab}
-              >
-                {tab}
-              </span>
-            ))}
-          </nav>
+        <Panel as="aside">
+          <Tabs active="Guide" items={reviewTabItems} />
 
           <div className="p-2">
             <div className="mb-2 flex items-center justify-between px-1">
               <h2 className="text-xs font-semibold uppercase text-[var(--muted)]">Guide</h2>
-              <span className="rounded-sm border border-[var(--border)] px-1.5 py-0.5 text-xs text-[var(--muted)]">
-                mocked
-              </span>
+              <Badge tone="muted">mocked</Badge>
             </div>
             <div className="overflow-hidden rounded-md border border-[var(--border)]">
               {guideSections.map((section, index) => (
@@ -86,36 +94,32 @@ export default function Home() {
                     <h3 className="truncate text-sm font-semibold">
                       {index + 1}. {section.title}
                     </h3>
-                    <span className="rounded-sm border border-[var(--border)] bg-[var(--panel)] px-1.5 py-0.5 text-xs">
-                      {section.risk}
-                    </span>
+                    <Badge tone={section.risk === "High" ? "danger" : "warning"}>{section.risk}</Badge>
                   </div>
                   <p className="line-clamp-2 text-xs leading-5 text-[var(--muted)]">{section.summary}</p>
                 </article>
               ))}
             </div>
           </div>
-        </aside>
+        </Panel>
 
-        <section className="min-h-[calc(100vh-88px)] rounded-md border border-[var(--border)] bg-[var(--panel)]">
-          <div className="flex min-h-12 flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
-            <div>
-              <h2 className="text-sm font-semibold">Workspace Preview</h2>
-              <p className="text-xs text-[var(--muted)]">Unauthenticated foundation state</p>
-            </div>
-            <div className="flex gap-2 text-xs">
-              <span className="rounded-sm border border-[var(--border)] px-2 py-1 text-[var(--success)]">
-                4 files
-              </span>
-              <span className="rounded-sm border border-[var(--border)] px-2 py-1 text-[var(--warning)]">
-                3 sections
-              </span>
-            </div>
-          </div>
+        <Panel className="min-h-[calc(100vh-88px)]">
+          <PanelHeader
+            actions={
+              <>
+                <Badge tone="success">4 files</Badge>
+                <Badge tone="warning">3 sections</Badge>
+                <Badge tone="muted">mocked</Badge>
+              </>
+            }
+            description="Unauthenticated foundation state"
+            title="Workspace Preview"
+          />
 
           <div className="grid min-h-[calc(100vh-137px)] lg:grid-cols-[260px_1fr]">
             <div className="border-b border-[var(--border)] lg:border-b-0 lg:border-r">
-              <div className="border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase text-[var(--muted)]">
+              <div className="flex items-center gap-2 border-b border-[var(--border)] px-3 py-2 text-xs font-semibold uppercase text-[var(--muted)]">
+                <GitPullRequestArrow aria-hidden="true" className="size-3.5" />
                 Changed files
               </div>
               <div className="divide-y divide-[var(--border)]">
@@ -156,7 +160,7 @@ export default function Home() {
               </div>
             </div>
           </div>
-        </section>
+        </Panel>
       </section>
     </main>
   );

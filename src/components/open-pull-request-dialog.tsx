@@ -1,6 +1,9 @@
 "use client";
 
 import { useId, useState } from "react";
+import { GitPullRequestArrow, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/text-field";
 
 export function OpenPullRequestDialog() {
   const [isOpen, setIsOpen] = useState(false);
@@ -9,13 +12,13 @@ export function OpenPullRequestDialog() {
 
   return (
     <>
-      <button
-        className="h-9 rounded-md border border-[var(--border)] bg-[var(--panel-subtle)] px-3 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--panel-strong)]"
+      <Button
         onClick={() => setIsOpen(true)}
         type="button"
       >
+        <GitPullRequestArrow aria-hidden="true" className="size-4" />
         Open pull request
-      </button>
+      </Button>
 
       {isOpen ? (
         <div
@@ -39,9 +42,8 @@ export function OpenPullRequestDialog() {
               <label className="text-xs font-medium text-[var(--muted)]" htmlFor="pull-request-url">
                 Pull request URL
               </label>
-              <input
+              <TextField
                 autoFocus
-                className="h-10 rounded-md border border-[var(--border)] bg-[var(--input)] px-3 text-sm text-[var(--foreground)] outline-none placeholder:text-[var(--muted)]"
                 id="pull-request-url"
                 placeholder="https://github.com/org/repo/pull/123"
                 type="url"
@@ -52,20 +54,21 @@ export function OpenPullRequestDialog() {
             </div>
 
             <div className="flex justify-end gap-2 border-t border-[var(--border)] bg-[var(--panel-subtle)] px-4 py-3">
-              <button
-                className="h-9 rounded-md border border-[var(--border)] px-3 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--panel-strong)]"
+              <Button
                 onClick={() => setIsOpen(false)}
                 type="button"
+                variant="secondary"
               >
+                <X aria-hidden="true" className="size-4" />
                 Cancel
-              </button>
-              <button
-                className="h-9 rounded-md bg-[var(--button)] px-3 text-sm font-medium text-[var(--button-foreground)] opacity-60"
+              </Button>
+              <Button
                 disabled
                 type="button"
+                variant="primary"
               >
                 Import PR
-              </button>
+              </Button>
             </div>
           </div>
         </div>

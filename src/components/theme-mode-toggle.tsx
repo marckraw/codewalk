@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { Monitor, Moon, Sun } from "lucide-react";
 
 type ThemeMode = "light" | "dark" | "system";
 
-const modes: ThemeMode[] = ["light", "dark", "system"];
+const modes: Array<{ icon: ReactNode; label: ThemeMode }> = [
+  { icon: <Sun aria-hidden="true" className="size-3.5" />, label: "light" },
+  { icon: <Moon aria-hidden="true" className="size-3.5" />, label: "dark" },
+  { icon: <Monitor aria-hidden="true" className="size-3.5" />, label: "system" },
+];
+
+const modeLabels = modes.map((mode) => mode.label);
 
 function applyTheme(mode: ThemeMode) {
   const root = document.documentElement;
@@ -23,7 +31,7 @@ export function ThemeModeToggle() {
 
   useEffect(() => {
     const saved = window.localStorage.getItem("codewalk-theme-mode") as ThemeMode | null;
-    const nextMode = saved && modes.includes(saved) ? saved : "system";
+    const nextMode = saved && modeLabels.includes(saved) ? saved : "system";
 
     applyTheme(nextMode);
     queueMicrotask(() => setMode(nextMode));
@@ -43,13 +51,15 @@ export function ThemeModeToggle() {
     >
       {modes.map((themeMode) => (
         <button
-          aria-pressed={mode === themeMode}
-          className="h-8 border-r border-[var(--border)] px-2 capitalize text-[var(--muted)] last:border-r-0 hover:bg-[var(--panel-strong)] hover:text-[var(--foreground)] aria-pressed:bg-[var(--foreground)] aria-pressed:text-[var(--background)]"
-          key={themeMode}
-          onClick={() => selectMode(themeMode)}
+          aria-label={`${themeMode.label} theme`}
+          aria-pressed={mode === themeMode.label}
+          className="flex h-8 items-center justify-center gap-1.5 border-r border-[var(--border)] px-2 capitalize text-[var(--muted)] last:border-r-0 hover:bg-[var(--panel-strong)] hover:text-[var(--foreground)] aria-pressed:bg-[var(--foreground)] aria-pressed:text-[var(--background)]"
+          key={themeMode.label}
+          onClick={() => selectMode(themeMode.label)}
           type="button"
         >
-          {themeMode}
+          {themeMode.icon}
+          <span className="hidden sm:inline">{themeMode.label}</span>
         </button>
       ))}
     </div>
