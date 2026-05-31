@@ -1,14 +1,59 @@
 "use client";
 
 import { useId, useState } from "react";
+import type { FormEvent } from "react";
 import { GitPullRequestArrow, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
+import { formatPullRequestRef, parseGitHubPullRequestUrl, type GitHubPullRequestRef } from "@/lib/github/pull-request-url";
 
 export function OpenPullRequestDialog() {
+  const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [parsedRef, setParsedRef] = useState<GitHubPullRequestRef | null>(null);
   const titleId = useId();
   const descriptionId = useId();
+
+  async function submitPullRequestUrl(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const formData = new FormData(event.currentTarget);
+    const url = String(formData.get("pull-request-url") ?? "");
+    const parsed = parseGitHubPullRequestUrl(url);
+
+    setParsedRef(null);
+
+    if (!parsed.ok) {
+      setError(parsed.error);
+      return;
+    }
+
+    setError(null);
+    setIsSubmitting(true);
+
+    try {
+      const response = await fetch("/api/pull-requests/parse", {
+        body: JSON.stringify({ url }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        method: "POST",
+      });
+      const body = (await response.json()) as { error?: string; pullRequest?: GitHubPullRequestRef };
+
+      if (!response.ok || !body.pullRequest) {
+        setError(body.error ?? "The pull request URL could not be parsed.");
+        return;
+      }
+
+      setParsedRef(body.pullRequest);
+    } catch {
+      setError("The pull request parser route is unavailable.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <>
@@ -28,7 +73,10 @@ export function OpenPullRequestDialog() {
           className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4"
           role="dialog"
         >
-          <div className="w-full max-w-lg overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] shadow-xl">
+          <form
+            className="w-full max-w-lg overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] shadow-xl"
+            onSubmit={submitPullRequestUrl}
+          >
             <div className="border-b border-[var(--border)] px-4 py-3">
               <h2 className="text-sm font-semibold" id={titleId}>
                 Open pull request
@@ -45,12 +93,20 @@ export function OpenPullRequestDialog() {
               <TextField
                 autoFocus
                 id="pull-request-url"
+                name="pull-request-url"
                 placeholder="https://github.com/org/repo/pull/123"
                 type="url"
               />
-              <p className="text-xs text-[var(--muted)]">
-                Import is mocked in this scaffold. Real validation lands with the PR import tickets.
-              </p>
+              {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
+              {parsedRef ? (
+                <p className="text-xs text-[var(--success)]">
+                  Parsed {formatPullRequestRef(parsedRef)}. Import remains stubbed until GitHub REST lands.
+                </p>
+              ) : (
+                <p className="text-xs text-[var(--muted)]">
+                  Import is stubbed here; real GitHub fetching lands in the next ticket.
+                </p>
+              )}
             </div>
 
             <div className="flex justify-end gap-2 border-t border-[var(--border)] bg-[var(--panel-subtle)] px-4 py-3">
@@ -63,14 +119,14 @@ export function OpenPullRequestDialog() {
                 Cancel
               </Button>
               <Button
-                disabled
-                type="button"
+                disabled={isSubmitting}
+                type="submit"
                 variant="primary"
               >
-                Import PR
+                {isSubmitting ? "Parsing" : "Import PR"}
               </Button>
             </div>
-          </div>
+          </form>
         </div>
       ) : null}
     </>
