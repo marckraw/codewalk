@@ -32,6 +32,8 @@ npm run build
 npm run lint
 npm run typecheck
 npm run test
+npm run db:generate
+npm run db:migrate
 ```
 
 ## MVP Stack
@@ -57,3 +59,14 @@ NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/review
 ```
 
 Without Clerk keys, the app renders a setup prompt instead of starting auth.
+
+## Database
+
+Codewalk uses Neon Postgres with Drizzle. Set `DATABASE_URL` in `.env.local`, then generate and run migrations:
+
+```bash
+npm run db:generate
+npm run db:migrate
+```
+
+Database helpers live under `src/lib/db/` and should only be imported from server-side code.
