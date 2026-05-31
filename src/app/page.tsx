@@ -1,12 +1,12 @@
+import { AuthControls } from "@/components/auth/auth-controls";
 import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Tabs } from "@/components/ui/tabs";
 import { Toolbar } from "@/components/ui/toolbar";
 import { APP_NAME, REVIEW_TABS } from "@/lib/product";
-import { FileCode2, GitPullRequestArrow, ListChecks, LogIn, MessageSquareText, Route } from "lucide-react";
+import { FileCode2, GitPullRequestArrow, ListChecks, MessageSquareText, Route } from "lucide-react";
 
 const previewFiles = [
   { path: "src/app/review/[id]/page.tsx", status: "modified", count: "+84 -17" },
@@ -63,13 +63,7 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <OpenPullRequestDialog />
             <ThemeModeToggle />
-            <Button
-              type="button"
-              variant="primary"
-            >
-              <LogIn aria-hidden="true" className="size-4" />
-              Sign in with GitHub
-            </Button>
+            <AuthControls />
           </div>
         </Toolbar>
       </header>

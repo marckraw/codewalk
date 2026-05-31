@@ -44,3 +44,16 @@ npm run test
 - `@pierre/trees` and `@pierre/diffs` for PR review UI
 
 Only the foundation is wired in this ticket. Auth, persistence, PR import, diff rendering, and guide generation are added by the follow-up Linear tickets.
+
+## Clerk Auth
+
+Codewalk uses Clerk with GitHub OAuth. Add these values to `.env.local` before testing sign-in:
+
+```bash
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=...
+CLERK_SECRET_KEY=...
+NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL=/review
+NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL=/review
+```
+
+Without Clerk keys, the app renders a setup prompt instead of starting auth.
