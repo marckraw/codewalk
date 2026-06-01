@@ -1,7 +1,7 @@
 import "server-only";
 
 import { eq } from "drizzle-orm";
-import { db } from "./client";
+import { getDb } from "./client";
 import { users } from "./schema";
 
 export type AuthenticatedUserInput = {
@@ -11,6 +11,7 @@ export type AuthenticatedUserInput = {
 };
 
 export async function upsertAuthenticatedUser(input: AuthenticatedUserInput) {
+  const db = getDb();
   const [user] = await db
     .insert(users)
     .values({
@@ -32,6 +33,7 @@ export async function upsertAuthenticatedUser(input: AuthenticatedUserInput) {
 }
 
 export async function getUserByClerkId(clerkUserId: string) {
+  const db = getDb();
   const [user] = await db.select().from(users).where(eq(users.clerkUserId, clerkUserId)).limit(1);
 
   return user ?? null;

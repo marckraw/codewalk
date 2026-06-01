@@ -32,9 +32,13 @@ describe("OpenPullRequestDialog", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("submits valid GitHub PR URLs to the parser route stub", async () => {
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ pullRequest: { owner: "openai", repo: "codex", number: 24 } }), {
+  it("submits valid GitHub PR URLs to the import route", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({
+        counts: { comments: 2, commits: 3, files: 4 },
+        pullRequest: { owner: "openai", repo: "codex", number: 24 },
+        snapshot: { headSha: "head-sha", id: "snapshot-id" },
+      }), {
         headers: { "Content-Type": "application/json" },
         status: 200,
       }),
@@ -46,6 +50,10 @@ describe("OpenPullRequestDialog", () => {
     await userEvent.type(screen.getByLabelText("Pull request URL"), "https://github.com/openai/codex/pull/24");
     await userEvent.click(screen.getByRole("button", { name: "Import PR" }));
 
-    expect(await screen.findByText("Parsed openai/codex#24. Import remains stubbed until GitHub REST lands.")).toBeInTheDocument();
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "/api/pull-requests/import",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(await screen.findByText("Imported openai/codex#24 with 4 files, 3 commits, and 2 comments.")).toBeInTheDocument();
   });
 });

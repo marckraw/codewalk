@@ -7,11 +7,25 @@ import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
 import { formatPullRequestRef, parseGitHubPullRequestUrl, type GitHubPullRequestRef } from "@/lib/github/pull-request-url";
 
+type PullRequestImportResponse = {
+  counts?: {
+    comments: number;
+    commits: number;
+    files: number;
+  };
+  error?: string;
+  pullRequest?: GitHubPullRequestRef;
+  snapshot?: {
+    headSha: string;
+    id: string;
+  };
+};
+
 export function OpenPullRequestDialog() {
   const [error, setError] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [parsedRef, setParsedRef] = useState<GitHubPullRequestRef | null>(null);
+  const [importResult, setImportResult] = useState<PullRequestImportResponse | null>(null);
   const titleId = useId();
   const descriptionId = useId();
 
@@ -22,7 +36,7 @@ export function OpenPullRequestDialog() {
     const url = String(formData.get("pull-request-url") ?? "");
     const parsed = parseGitHubPullRequestUrl(url);
 
-    setParsedRef(null);
+    setImportResult(null);
 
     if (!parsed.ok) {
       setError(parsed.error);
@@ -33,23 +47,23 @@ export function OpenPullRequestDialog() {
     setIsSubmitting(true);
 
     try {
-      const response = await fetch("/api/pull-requests/parse", {
+      const response = await fetch("/api/pull-requests/import", {
         body: JSON.stringify({ url }),
         headers: {
           "Content-Type": "application/json",
         },
         method: "POST",
       });
-      const body = (await response.json()) as { error?: string; pullRequest?: GitHubPullRequestRef };
+      const body = (await response.json()) as PullRequestImportResponse;
 
-      if (!response.ok || !body.pullRequest) {
-        setError(body.error ?? "The pull request URL could not be parsed.");
+      if (!response.ok || !body.pullRequest || !body.snapshot || !body.counts) {
+        setError(body.error ?? "The pull request could not be imported.");
         return;
       }
 
-      setParsedRef(body.pullRequest);
+      setImportResult(body);
     } catch {
-      setError("The pull request parser route is unavailable.");
+      setError("The pull request import route is unavailable.");
     } finally {
       setIsSubmitting(false);
     }
@@ -98,13 +112,14 @@ export function OpenPullRequestDialog() {
                 type="url"
               />
               {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
-              {parsedRef ? (
+              {importResult?.pullRequest && importResult.counts ? (
                 <p className="text-xs text-[var(--success)]">
-                  Parsed {formatPullRequestRef(parsedRef)}. Import remains stubbed until GitHub REST lands.
+                  Imported {formatPullRequestRef(importResult.pullRequest)} with {importResult.counts.files} files,{" "}
+                  {importResult.counts.commits} commits, and {importResult.counts.comments} comments.
                 </p>
               ) : (
                 <p className="text-xs text-[var(--muted)]">
-                  Import is stubbed here; real GitHub fetching lands in the next ticket.
+                  Codewalk stores a reusable snapshot with PR metadata, files, commits, and available comments.
                 </p>
               )}
             </div>
@@ -123,7 +138,7 @@ export function OpenPullRequestDialog() {
                 type="submit"
                 variant="primary"
               >
-                {isSubmitting ? "Parsing" : "Import PR"}
+                {isSubmitting ? "Importing" : "Import PR"}
               </Button>
             </div>
           </form>
