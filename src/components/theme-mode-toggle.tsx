@@ -1,67 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
-import { Monitor, Moon, Sun } from "lucide-react";
+import { useState } from "react";
+import { Moon, Sun } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
-type ThemeMode = "light" | "dark" | "system";
+type Theme = "light" | "dark";
 
-const modes: Array<{ icon: ReactNode; label: ThemeMode }> = [
-  { icon: <Sun aria-hidden="true" className="size-3.5" />, label: "light" },
-  { icon: <Moon aria-hidden="true" className="size-3.5" />, label: "dark" },
-  { icon: <Monitor aria-hidden="true" className="size-3.5" />, label: "system" },
-];
+const storageKey = "codewalk-theme";
 
-const modeLabels = modes.map((mode) => mode.label);
-
-function applyTheme(mode: ThemeMode) {
-  const root = document.documentElement;
-
-  if (mode === "system") {
-    root.removeAttribute("data-theme");
-  } else {
-    root.dataset.theme = mode;
+function getAppliedTheme(): Theme {
+  if (typeof document === "undefined") {
+    return "light";
   }
 
-  root.dataset.themeMode = mode;
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
+function applyTheme(theme: Theme) {
+  document.documentElement.classList.toggle("dark", theme === "dark");
+  document.documentElement.style.colorScheme = theme;
 }
 
 export function ThemeModeToggle() {
-  const [mode, setMode] = useState<ThemeMode>("system");
+  const [theme, setTheme] = useState<Theme>(getAppliedTheme);
 
-  useEffect(() => {
-    const saved = window.localStorage.getItem("codewalk-theme-mode") as ThemeMode | null;
-    const nextMode = saved && modeLabels.includes(saved) ? saved : "system";
+  function toggleTheme() {
+    const nextTheme = getAppliedTheme() === "dark" ? "light" : "dark";
 
-    applyTheme(nextMode);
-    queueMicrotask(() => setMode(nextMode));
-  }, []);
-
-  function selectMode(nextMode: ThemeMode) {
-    setMode(nextMode);
-    window.localStorage.setItem("codewalk-theme-mode", nextMode);
-    applyTheme(nextMode);
+    setTheme(nextTheme);
+    applyTheme(nextTheme);
+    window.localStorage.setItem(storageKey, nextTheme);
   }
 
   return (
-    <div
-      aria-label="Theme mode"
-      className="grid grid-cols-3 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel-subtle)] text-xs"
-      role="group"
+    <Button
+      aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+      onClick={toggleTheme}
+      size="icon"
+      suppressHydrationWarning
+      type="button"
+      variant="secondary"
     >
-      {modes.map((themeMode) => (
-        <button
-          aria-label={`${themeMode.label} theme`}
-          aria-pressed={mode === themeMode.label}
-          className="flex h-8 items-center justify-center gap-1.5 border-r border-[var(--border)] px-2 capitalize text-[var(--muted)] last:border-r-0 hover:bg-[var(--panel-strong)] hover:text-[var(--foreground)] aria-pressed:bg-[var(--foreground)] aria-pressed:text-[var(--background)]"
-          key={themeMode.label}
-          onClick={() => selectMode(themeMode.label)}
-          type="button"
-        >
-          {themeMode.icon}
-          <span className="hidden sm:inline">{themeMode.label}</span>
-        </button>
-      ))}
-    </div>
+      {theme === "dark" ? (
+        <Sun aria-hidden="true" className="size-4" />
+      ) : (
+        <Moon aria-hidden="true" className="size-4" />
+      )}
+    </Button>
   );
 }

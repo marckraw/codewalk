@@ -14,6 +14,21 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              try {
+                const theme = localStorage.getItem("codewalk-theme");
+                const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+                const shouldUseDark = theme ? theme === "dark" : prefersDark;
+                document.documentElement.classList.toggle("dark", shouldUseDark);
+                document.documentElement.style.colorScheme = shouldUseDark ? "dark" : "light";
+              } catch {}
+            `,
+          }}
+        />
+      </head>
       <body>
         <AuthProvider>{children}</AuthProvider>
       </body>
