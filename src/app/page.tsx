@@ -1,15 +1,19 @@
 import { AuthControls } from "@/components/auth/auth-controls";
 import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
+import { ReviewDashboard } from "@/components/review/review-dashboard";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
+import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Toolbar } from "@/components/ui/toolbar";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
+import { listReviewWorkspaces } from "@/lib/db/review-workspace";
 import { APP_NAME } from "@/lib/product";
 
 export default async function Home() {
   const user = await getCurrentCodewalkUser();
   const isAuthenticated = user.status === "authenticated";
+  const workspaces = isAuthenticated ? await listReviewWorkspaces() : [];
 
   return (
     <main className="min-h-screen">
@@ -25,7 +29,6 @@ export default async function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {isAuthenticated ? <OpenPullRequestDialog /> : null}
             <ThemeModeToggle />
             <AuthControls />
           </div>
@@ -33,29 +36,63 @@ export default async function Home() {
       </header>
 
       <section className="px-4 py-4 sm:px-6">
-        <Panel className="min-h-[calc(100vh-88px)]">
-          <PanelHeader
-            description={
-              isAuthenticated
-                ? "Import a GitHub pull request or open a guided review link."
-                : "Sign in with GitHub to import pull requests and open guided reviews."
-            }
-            title="Review workspace"
-          />
-
-          <div className="grid min-h-[calc(100vh-137px)] place-items-center p-4">
-            <EmptyState
-              action={isAuthenticated ? <OpenPullRequestDialog /> : null}
-              className="w-full max-w-xl"
-              description={
-                isAuthenticated
-                  ? "No pull request snapshot is loaded yet. Import a PR to create a review workspace, or open a ready review from a PR comment."
-                  : "Use the GitHub sign-in button to start a Codewalk review."
-              }
-              title={isAuthenticated ? "No review loaded" : "Sign in required"}
+        {user.status === "misconfigured" ? (
+          <Panel className="max-w-2xl">
+            <PanelHeader
+              actions={<Badge tone="warning">setup required</Badge>}
+              description="GitHub sign-in is disabled until Clerk keys are configured."
+              title="Clerk configuration missing"
             />
-          </div>
-        </Panel>
+            <div className="grid gap-3 p-4 text-sm">
+              <p className="text-[var(--muted)]">Add the missing keys to `.env.local`, then restart the development server.</p>
+              <ul className="list-inside list-disc font-mono text-xs text-[var(--foreground)]">
+                {user.missingKeys.map((key) => (
+                  <li key={key}>{key}</li>
+                ))}
+              </ul>
+            </div>
+          </Panel>
+        ) : !isAuthenticated ? (
+          <Panel className="min-h-[calc(100vh-88px)]">
+            <PanelHeader
+              actions={<Badge tone="warning">auth required</Badge>}
+              description="Sign in with GitHub to import pull requests and open guided reviews."
+              title="Codewalk reviews"
+            />
+            <div className="grid min-h-[calc(100vh-137px)] place-items-center p-4">
+              <EmptyState
+                className="w-full max-w-xl"
+                description="Use the GitHub sign-in button to start a Codewalk review."
+                title="Sign in required"
+              />
+            </div>
+          </Panel>
+        ) : (
+          <Panel className="min-h-[calc(100vh-88px)]">
+            <PanelHeader
+              actions={
+                <>
+                  <Badge tone="muted">{workspaces.length} reviews</Badge>
+                  <OpenPullRequestDialog />
+                </>
+              }
+              description="Recent pull request snapshots and their guided review status."
+              title="Codewalk reviews"
+            />
+            {workspaces.length === 0 ? (
+              <div className="grid min-h-[calc(100vh-137px)] place-items-center p-4">
+                <EmptyState
+                  action={<OpenPullRequestDialog />}
+                  className="w-full max-w-xl"
+                  description="No pull request snapshot has been imported yet. Import a PR to create a review workspace, or open a ready review from a PR comment."
+                  title="No reviews yet"
+                />
+              </div>
+            ) : (
+              <ReviewDashboard items={workspaces} />
+            )}
+          </Panel>
+        )}
       </section>
     </main>
   );
