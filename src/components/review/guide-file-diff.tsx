@@ -21,7 +21,14 @@ export function GuideFileDiff({ diff, file, loading, renderRef }: GuideFileDiffP
         <p className="mt-1 text-xs leading-5 text-muted-foreground">{file.reason}</p>
       </div>
       <div className="h-[560px] min-h-0">
-        <PierreDiffViewer diff={diff} emptyMessage="No patch was captured for this file." file={file.path} loading={loading} title="Guide section diff" />
+        <PierreDiffViewer
+          diff={diff}
+          emptyMessage="No patch was captured for this file."
+          file={file.path}
+          fileStatus={file.status}
+          loading={loading}
+          title="Guide section diff"
+        />
       </div>
     </article>
   );

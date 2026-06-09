@@ -73,7 +73,9 @@ export function ReviewWorkspace({ autoGenerate, deepLink = EMPTY_DEEP_LINK, work
     return workspace.guide.sections[0].id;
   }, [activeGuideSectionId, workspace.guide]);
   const diffByPath = useMemo(() => new Map(workspace.files.map((file) => [file.path, file.patch ?? ""])), [workspace.files]);
+  const statusByPath = useMemo(() => new Map(workspace.files.map((file) => [file.path, file.status])), [workspace.files]);
   const selectedDiff = selectedFile ? diffByPath.get(selectedFile) ?? "" : "";
+  const selectedFileStatus = selectedFile ? statusByPath.get(selectedFile) ?? null : null;
 
   useEffect(() => {
     if (selectedView !== "guide" || !workspace.guide || typeof IntersectionObserver === "undefined") {
@@ -273,7 +275,7 @@ export function ReviewWorkspace({ autoGenerate, deepLink = EMPTY_DEEP_LINK, work
               visibleFiles={visibleFiles}
             />
             <main className="min-w-0 overflow-hidden">
-              <PierreDiffViewer diff={selectedDiff} file={selectedFile} title="Pull request diff" />
+              <PierreDiffViewer diff={selectedDiff} file={selectedFile} fileStatus={selectedFileStatus} title="Pull request diff" />
             </main>
           </>
         )}
