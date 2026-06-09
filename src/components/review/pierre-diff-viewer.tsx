@@ -9,12 +9,15 @@ import {
 } from "@pierre/diffs";
 import { PatchDiff, Virtualizer, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { Loader2 } from "lucide-react";
+import { PierreDiffErrorBoundary } from "./pierre-diff-error-boundary";
 import { planPierreDiffPerformance } from "./pierre-diff-performance.pure";
+import { describeMissingPierrePatch } from "./pierre-diff-viewer.pure";
 
 interface PierreDiffViewerProps<TAnnotation = undefined> {
   diff: string;
   emptyMessage?: string;
   file: string | null;
+  fileStatus?: string | null;
   lineAnnotations?: DiffLineAnnotation<TAnnotation>[];
   loading?: boolean;
   onSelectedLinesChange?: (range: SelectedLineRange | null) => void;
@@ -27,6 +30,7 @@ export function PierreDiffViewer<TAnnotation>({
   diff,
   emptyMessage = "Select a changed file to inspect its pull request diff.",
   file,
+  fileStatus = null,
   lineAnnotations = [],
   loading = false,
   onSelectedLinesChange,
@@ -105,14 +109,35 @@ export function PierreDiffViewer<TAnnotation>({
       })
     : null;
 
+  const missingMessage = diffContent ? null : describeMissingPierrePatch({ diff, fileStatus });
+
   return (
     <div aria-busy={loading} className="flex h-full min-h-0 flex-col">
       {renderDiffHeader({ file, loading, title })}
       <div className="app-scrollbar min-h-0 flex-1 overflow-auto bg-background/60">
-        {diffContent ?? (
-          <div className="p-3 font-mono text-[11px] text-muted-foreground">{diff.trim() || "(no diff available)"}</div>
+        {diffContent ? (
+          <PierreDiffErrorBoundary fallback={renderRawDiffFallback(diff, true)}>{diffContent}</PierreDiffErrorBoundary>
+        ) : missingMessage ? (
+          <div className="flex h-full min-h-32 items-center justify-center p-3 text-center text-xs text-muted-foreground">
+            {missingMessage}
+          </div>
+        ) : (
+          renderRawDiffFallback(diff, false)
         )}
       </div>
+    </div>
+  );
+}
+
+function renderRawDiffFallback(diff: string, afterError: boolean) {
+  return (
+    <div className="p-3">
+      {afterError ? (
+        <p className="mb-2 text-[11px] text-muted-foreground">Couldn’t render this diff — showing the raw patch.</p>
+      ) : null}
+      <pre className="overflow-x-auto font-mono text-[11px] whitespace-pre text-muted-foreground">
+        {diff.trim() || "(no diff available)"}
+      </pre>
     </div>
   );
 }
