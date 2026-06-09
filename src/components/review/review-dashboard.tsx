@@ -1,13 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { ArrowUpRight, GitPullRequestArrow } from "lucide-react";
 import { CodeReviewGuideGenerationControl } from "@/components/code-review-guide-generation-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/cn";
 import type { ReviewWorkspaceState, ReviewWorkspaceSummary } from "@/lib/db/review-workspace";
+import { REVIEW_WORKSPACE_POLL_INTERVAL_MS } from "./use-review-workspace-live.pure";
 import {
   filterReviewWorkspaceSummaries,
   formatAbsoluteReviewDate,
@@ -61,6 +63,19 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
     () => null,
   );
   const now = nowMs ? new Date(nowMs) : null;
+
+  // While any guide is being prepared, re-render from the server on the same
+  // cadence as the workspace poller so rows flip to ready/failed on their own.
+  const router = useRouter();
+  const hasPreparing = items.some((item) => item.status === "preparing");
+  useEffect(() => {
+    if (!hasPreparing) {
+      return;
+    }
+
+    const timer = setInterval(() => router.refresh(), REVIEW_WORKSPACE_POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [hasPreparing, router]);
 
   const repos = useMemo(() => listReviewWorkspaceRepos(items), [items]);
   const statusCounts = useMemo(() => countByStatus(items), [items]);

@@ -1,12 +1,12 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   CodeReviewGuideGenerationError,
-  generateAndPersistCodeReviewGuide,
+  startCodeReviewGuideGenerationRun,
 } from "@/lib/code-review-guide-generation";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -48,25 +48,37 @@ export async function POST(request: Request) {
       email: currentUser.email,
       name: currentUser.name,
     });
-    const result = await generateAndPersistCodeReviewGuide({
+    const run = await startCodeReviewGuideGenerationRun({
       force,
       requestedByUserId: user.id,
       snapshotId,
     });
 
-    return NextResponse.json({
-      generation: {
-        error: result.generation.error,
-        guideId: result.generation.guideId,
-        id: result.generation.id,
-        status: result.generation.status,
-      },
-      guide: {
-        id: result.guide.id,
-        status: result.guide.status,
-      },
-      status: "ready",
+    // Finish the daemon round-trip after the response is sent. The generation
+    // row is already persisted as "running", so reloading or closing the app
+    // does not lose the run — the workspace keeps polling until the row turns
+    // ready or failed.
+    after(async () => {
+      try {
+        await run.complete();
+      } catch {
+        // Failures are persisted on the generation row and logged by the
+        // generation pipeline; there is no response left to surface them on.
+      }
     });
+
+    return NextResponse.json(
+      {
+        generation: {
+          error: run.generation.error,
+          guideId: run.generation.guideId,
+          id: run.generation.id,
+          status: run.generation.status,
+        },
+        status: "preparing",
+      },
+      { status: 202 },
+    );
   } catch (error) {
     if (error instanceof CodeReviewGuideGenerationError) {
       return NextResponse.json({ code: error.code, error: error.message }, { status: error.status });

@@ -4,6 +4,19 @@ import { POST } from "./route";
 
 vi.mock("server-only", () => ({}));
 
+const afterTasks = vi.hoisted(() => [] as Array<() => unknown>);
+
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+
+  return {
+    ...actual,
+    after: vi.fn((task: () => unknown) => {
+      afterTasks.push(task);
+    }),
+  };
+});
+
 vi.mock("@/lib/auth/server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
@@ -19,17 +32,20 @@ vi.mock("@/lib/code-review-guide-generation", async () => {
 
   return {
     ...actual,
-    generateAndPersistCodeReviewGuide: vi.fn(),
+    startCodeReviewGuideGenerationRun: vi.fn(),
   };
 });
 
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { generateAndPersistCodeReviewGuide } from "@/lib/code-review-guide-generation";
+import { startCodeReviewGuideGenerationRun } from "@/lib/code-review-guide-generation";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
 
 describe("POST /api/code-review-guides/generate", () => {
+  const complete = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
+    afterTasks.length = 0;
     vi.mocked(getCurrentCodewalkUser).mockResolvedValue({
       email: "reviewer@example.com",
       name: "Reviewer",
@@ -37,42 +53,53 @@ describe("POST /api/code-review-guides/generate", () => {
       userId: "clerk-user-id",
     });
     vi.mocked(upsertAuthenticatedUser).mockResolvedValue({ id: "db-user-id" } as never);
-    vi.mocked(generateAndPersistCodeReviewGuide).mockResolvedValue({
+    complete.mockResolvedValue({} as never);
+    vi.mocked(startCodeReviewGuideGenerationRun).mockResolvedValue({
+      complete,
       generation: {
         error: null,
-        guideId: "guide-id",
+        guideId: null,
         id: "generation-id",
-        status: "ready",
+        status: "running",
       },
-      guide: {
-        id: "guide-id",
-        status: "ready",
-      },
+      snapshot: { id: "snapshot-id" },
     } as never);
   });
 
-  it("generates a guide for an imported snapshot", async () => {
+  it("starts a generation run and responds before it completes", async () => {
     const response = await POST(jsonRequest({ force: true, snapshotId: "snapshot-id" }));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
       generation: {
         error: null,
-        guideId: "guide-id",
+        guideId: null,
         id: "generation-id",
-        status: "ready",
+        status: "running",
       },
-      guide: {
-        id: "guide-id",
-        status: "ready",
-      },
-      status: "ready",
+      status: "preparing",
     });
-    expect(generateAndPersistCodeReviewGuide).toHaveBeenCalledWith({
+    expect(startCodeReviewGuideGenerationRun).toHaveBeenCalledWith({
       force: true,
       requestedByUserId: "db-user-id",
       snapshotId: "snapshot-id",
     });
+    // The daemon round-trip is deferred until after the response is sent.
+    expect(complete).not.toHaveBeenCalled();
+    expect(afterTasks).toHaveLength(1);
+
+    await flushAfterTasks();
+
+    expect(complete).toHaveBeenCalledTimes(1);
+  });
+
+  it("swallows background completion failures (they are persisted on the row)", async () => {
+    complete.mockRejectedValue(new CodeReviewGuideGenerationError("daemon", "boom", 502));
+
+    const response = await POST(jsonRequest({ snapshotId: "snapshot-id" }));
+
+    expect(response.status).toBe(202);
+    await expect(flushAfterTasks()).resolves.not.toThrow();
   });
 
   it("validates request body before touching auth", async () => {
@@ -88,11 +115,11 @@ describe("POST /api/code-review-guides/generate", () => {
     const response = await POST(jsonRequest({ snapshotId: "snapshot-id" }));
 
     expect(response.status).toBe(401);
-    expect(generateAndPersistCodeReviewGuide).not.toHaveBeenCalled();
+    expect(startCodeReviewGuideGenerationRun).not.toHaveBeenCalled();
   });
 
-  it("maps generation errors to API responses", async () => {
-    vi.mocked(generateAndPersistCodeReviewGuide).mockRejectedValue(
+  it("maps synchronous start errors to API responses", async () => {
+    vi.mocked(startCodeReviewGuideGenerationRun).mockRejectedValue(
       new CodeReviewGuideGenerationError("daemon", "Could not reach agents-daemon.", 503),
     );
 
@@ -105,6 +132,15 @@ describe("POST /api/code-review-guides/generate", () => {
     });
   });
 });
+
+async function flushAfterTasks() {
+  const tasks = [...afterTasks];
+  afterTasks.length = 0;
+
+  for (const task of tasks) {
+    await task();
+  }
+}
 
 function jsonRequest(body: unknown) {
   return new Request("http://localhost/api/code-review-guides/generate", {
