@@ -2,6 +2,7 @@ import { getTableName } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
   guideSections,
+  guideSectionFiles,
   guides,
   pullRequestComments,
   pullRequestCommits,
@@ -21,6 +22,7 @@ describe("database schema", () => {
     expect(getTableName(pullRequestComments)).toBe("pull_request_comments");
     expect(getTableName(guides)).toBe("guides");
     expect(getTableName(guideSections)).toBe("guide_sections");
+    expect(getTableName(guideSectionFiles)).toBe("guide_section_files");
     expect(getTableName(reviewNotes)).toBe("review_notes");
     expect(getTableName(reviewProgress)).toBe("review_progress");
   });
@@ -37,5 +39,18 @@ describe("database schema", () => {
     expect(reviewNotes.snapshotId.name).toBe("snapshot_id");
     expect(reviewProgress.userId.name).toBe("user_id");
     expect(reviewProgress.snapshotId.name).toBe("snapshot_id");
+  });
+
+  it("stores daemon-shaped guide metadata and section file references", () => {
+    expect(guides.daemonGuideId.name).toBe("daemon_guide_id");
+    expect(guides.cacheIdentity.name).toBe("cache_identity");
+    expect(guides.pullRequest.name).toBe("pull_request");
+    expect(guides.summary.name).toBe("summary");
+    expect(guides.overview.name).toBe("overview");
+    expect(guideSections.daemonSectionId.name).toBe("daemon_section_id");
+    expect(guideSections.narrative.name).toBe("narrative");
+    expect(guideSections.riskRationale.name).toBe("risk_rationale");
+    expect(guideSectionFiles.guideSectionId.name).toBe("guide_section_id");
+    expect(guideSectionFiles.hunkHints.name).toBe("hunk_hints");
   });
 });

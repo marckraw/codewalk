@@ -20,6 +20,14 @@ export const pullRequestFileStatus = pgEnum("pull_request_file_status", [
   "changed",
 ]);
 
+export const codeReviewGuideMode = pgEnum("code_review_guide_mode", ["pull-request"]);
+
+export const codeReviewGuideProvider = pgEnum("code_review_guide_provider", ["claude", "codex", "cursor", "gemini"]);
+
+export const codeReviewGuideStatus = pgEnum("code_review_guide_status", ["ready", "failed"]);
+
+export const codeReviewGuideGenerator = pgEnum("code_review_guide_generator", ["deterministic", "agent"]);
+
 export const guideRiskLevel = pgEnum("guide_risk_level", ["low", "medium", "high"]);
 
 export const noteAnchorType = pgEnum("note_anchor_type", ["guide_section", "file", "diff_range"]);
@@ -135,22 +143,32 @@ export const guides = pgTable(
   "guides",
   {
     id: uuid("id").defaultRandom().primaryKey(),
+    daemonGuideId: varchar("daemon_guide_id", { length: 191 }).notNull(),
     snapshotId: uuid("snapshot_id")
       .notNull()
       .references(() => pullRequestSnapshots.id, { onDelete: "cascade" }),
+    repository: text("repository").notNull(),
+    pullRequestNumber: integer("pull_request_number").notNull(),
+    targetId: text("target_id").notNull(),
+    mode: codeReviewGuideMode("mode").default("pull-request").notNull(),
+    cacheKey: text("cache_key").notNull(),
+    cacheIdentity: jsonb("cache_identity").$type<CodeReviewCacheIdentity>().notNull(),
+    provider: codeReviewGuideProvider("provider").notNull(),
     model: varchar("model", { length: 191 }).notNull(),
-    overview: jsonb("overview").$type<{
-      behaviorChanges: string[];
-      purpose: string;
-      risks: string[];
-      tests: string[];
-      touchedDomains: string[];
-    }>(),
+    effort: varchar("effort", { length: 191 }),
+    status: codeReviewGuideStatus("status").notNull(),
+    overview: text("overview").notNull(),
+    generatedBy: codeReviewGuideGenerator("generated_by").notNull(),
+    error: text("error"),
+    pullRequest: jsonb("pull_request").$type<CodeReviewGuidePullRequestMetadata>().notNull(),
+    summary: jsonb("summary").$type<CodeReviewGuideSummary>().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
-    snapshotIdx: uniqueIndex("guides_snapshot_idx").on(table.snapshotId),
+    daemonGuideIdIdx: uniqueIndex("guides_daemon_guide_id_idx").on(table.daemonGuideId),
+    snapshotCacheIdx: uniqueIndex("guides_snapshot_mode_cache_idx").on(table.snapshotId, table.mode, table.cacheKey),
+    targetIdx: index("guides_target_idx").on(table.targetId, table.mode, table.updatedAt),
   }),
 );
 
@@ -161,17 +179,39 @@ export const guideSections = pgTable(
     guideId: uuid("guide_id")
       .notNull()
       .references(() => guides.id, { onDelete: "cascade" }),
+    daemonSectionId: varchar("daemon_section_id", { length: 191 }).notNull(),
     order: integer("order").notNull(),
     title: varchar("title", { length: 255 }).notNull(),
     summary: text("summary").notNull(),
+    narrative: text("narrative").notNull(),
     riskLevel: guideRiskLevel("risk_level").notNull(),
-    filePaths: jsonb("file_paths").$type<string[]>().notNull(),
+    riskRationale: text("risk_rationale").notNull(),
     checklist: jsonb("checklist").$type<string[]>().notNull(),
-    keyHunks: jsonb("key_hunks").$type<Array<{ filePath: string; lineStart?: number; lineEnd?: number }>>().notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => ({
     guideOrderIdx: uniqueIndex("guide_sections_guide_order_idx").on(table.guideId, table.order),
+    guideDaemonSectionIdx: uniqueIndex("guide_sections_guide_daemon_section_idx").on(table.guideId, table.daemonSectionId),
+  }),
+);
+
+export const guideSectionFiles = pgTable(
+  "guide_section_files",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    guideSectionId: uuid("guide_section_id")
+      .notNull()
+      .references(() => guideSections.id, { onDelete: "cascade" }),
+    order: integer("order").notNull(),
+    path: text("path").notNull(),
+    status: varchar("status", { length: 64 }).notNull(),
+    reason: text("reason").notNull(),
+    hunkHints: jsonb("hunk_hints").$type<string[]>().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    sectionOrderIdx: uniqueIndex("guide_section_files_section_order_idx").on(table.guideSectionId, table.order),
+    sectionPathIdx: index("guide_section_files_section_path_idx").on(table.guideSectionId, table.path),
   }),
 );
 
@@ -199,6 +239,47 @@ export const reviewNotes = pgTable(
     snapshotUserIdx: index("review_notes_snapshot_user_idx").on(table.snapshotId, table.userId),
   }),
 );
+
+export type CodeReviewGuideMode = "pull-request";
+export type CodeReviewGuideProvider = "claude" | "codex" | "cursor" | "gemini";
+export type CodeReviewGuideStatus = "ready" | "failed";
+export type CodeReviewGuideGenerator = "deterministic" | "agent";
+export type CodeReviewGuideRiskLevel = "low" | "medium" | "high";
+
+export type CodeReviewCacheIdentity = {
+  comparisonRef: string | null;
+  comparisonPoint: string | null;
+  workingTreeVersionToken: string;
+};
+
+export type CodeReviewGuideFileEntry = {
+  status: string;
+  file: string;
+  previousFile?: string;
+};
+
+export type CodeReviewGuideSummary = {
+  cacheIdentity: CodeReviewCacheIdentity;
+  files: CodeReviewGuideFileEntry[];
+};
+
+export type CodeReviewGuidePullRequestMetadata = {
+  provider: "github";
+  repositoryOwner: string;
+  repositoryName: string;
+  number: number;
+  title: string | null;
+  url: string;
+  state: "open" | "closed" | "merged" | "unknown";
+  baseBranch: string;
+  headBranch: string;
+  headRepositoryOwner: string | null;
+  headRepositoryName: string | null;
+};
+
+export type CodeReviewGuideRow = typeof guides.$inferSelect;
+export type CodeReviewGuideSectionRow = typeof guideSections.$inferSelect;
+export type CodeReviewGuideSectionFileRow = typeof guideSectionFiles.$inferSelect;
 
 export const reviewProgress = pgTable(
   "review_progress",
