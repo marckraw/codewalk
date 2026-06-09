@@ -18,6 +18,10 @@ vi.mock("@/lib/db/pull-request-snapshots", () => ({
   persistPullRequestSnapshot: vi.fn(),
 }));
 
+vi.mock("@/lib/db/code-review-guide-generations", () => ({
+  updateCodeReviewGuideGenerationComment: vi.fn(),
+}));
+
 vi.mock("@/lib/code-review-guide-generation", async () => {
   const actual = await vi.importActual<typeof import("@/lib/code-review-guide-generation")>(
     "@/lib/code-review-guide-generation",
@@ -30,6 +34,7 @@ vi.mock("@/lib/code-review-guide-generation", async () => {
 });
 
 import { generateAndPersistCodeReviewGuide } from "@/lib/code-review-guide-generation";
+import { updateCodeReviewGuideGenerationComment } from "@/lib/db/code-review-guide-generations";
 import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
 import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
 import {
@@ -54,7 +59,18 @@ describe("POST /api/github/webhooks", () => {
       pullRequest: { number: 42, owner: "ef-global", repo: "example" },
     });
     vi.mocked(createServerGitHubRestClient).mockReturnValue({
+      createIssueComment: vi.fn().mockResolvedValue({
+        body: "preparing",
+        htmlUrl: "https://github.com/ef-global/example/pull/42#issuecomment-1",
+        id: 1,
+      }),
       getPullRequestSnapshot: vi.fn().mockResolvedValue(fixtureSnapshot),
+      listIssueComments: vi.fn().mockResolvedValue([]),
+      updateIssueComment: vi.fn().mockResolvedValue({
+        body: "ready",
+        htmlUrl: "https://github.com/ef-global/example/pull/42#issuecomment-1",
+        id: 1,
+      }),
     } as never);
     vi.mocked(persistPullRequestSnapshot).mockResolvedValue({
       headSha: "head-sha",
@@ -63,13 +79,26 @@ describe("POST /api/github/webhooks", () => {
       owner: "ef-global",
       repo: "example",
     } as never);
-    vi.mocked(generateAndPersistCodeReviewGuide).mockResolvedValue({
+    vi.mocked(updateCodeReviewGuideGenerationComment).mockResolvedValue({ githubCommentId: "1" } as never);
+    vi.mocked(generateAndPersistCodeReviewGuide).mockImplementation(async (input) => {
+      await input.onStarted?.({
+        generation: { githubCommentId: null } as never,
+        snapshot: { id: "snapshot-id", number: 42, owner: "ef-global", repo: "example" } as never,
+      });
+      await input.onReady?.({
+        generation: { githubCommentId: "1" } as never,
+        guide: { id: "guide-id" } as never,
+        snapshot: { id: "snapshot-id", number: 42, owner: "ef-global", repo: "example" } as never,
+      });
+
+      return {
       generation: {
         guideId: "guide-id",
         id: "generation-id",
         status: "ready",
       },
-    } as never);
+      } as never;
+    });
   });
 
   it("imports the PR snapshot and triggers guide generation for valid PR webhooks", async () => {
@@ -97,7 +126,25 @@ describe("POST /api/github/webhooks", () => {
       snapshot: fixtureSnapshot,
     });
     expect(generateAndPersistCodeReviewGuide).toHaveBeenCalledWith({
+      onFailed: expect.any(Function),
+      onReady: expect.any(Function),
+      onStarted: expect.any(Function),
       requestedByUserId: null,
+      snapshotId: "snapshot-id",
+    });
+    const github = vi.mocked(createServerGitHubRestClient).mock.results[0]?.value;
+    expect(github.createIssueComment).toHaveBeenCalledWith(
+      { number: 42, owner: "ef-global", repo: "example" },
+      expect.stringContaining("is preparing"),
+    );
+    expect(github.updateIssueComment).toHaveBeenCalledWith(
+      { number: 42, owner: "ef-global", repo: "example" },
+      "1",
+      expect.stringContaining("is ready"),
+    );
+    expect(updateCodeReviewGuideGenerationComment).toHaveBeenCalledWith({
+      githubCommentId: "1",
+      githubCommentUrl: "https://github.com/ef-global/example/pull/42#issuecomment-1",
       snapshotId: "snapshot-id",
     });
   });

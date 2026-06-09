@@ -28,6 +28,8 @@ describe("code review guide generation rows", () => {
       finishedAt: null,
       force: true,
       guideId: null,
+      githubCommentId: null,
+      githubCommentUrl: null,
       model: "gpt-5.4",
       provider: "codex",
       requestedByUserId: "user-id",

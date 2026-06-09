@@ -17,6 +17,20 @@ import { getPullRequestSnapshotById, type PullRequestSnapshotRow } from "@/lib/d
 
 export type GenerateCodeReviewGuideInput = {
   force?: boolean;
+  onFailed?: (context: {
+    error: string;
+    generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>;
+    snapshot: PullRequestSnapshotRow;
+  }) => Promise<void>;
+  onReady?: (context: {
+    generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>;
+    guide: Awaited<ReturnType<typeof persistCodeReviewGuide>>;
+    snapshot: PullRequestSnapshotRow;
+  }) => Promise<void>;
+  onStarted?: (context: {
+    generation: Awaited<ReturnType<typeof startCodeReviewGuideGeneration>>;
+    snapshot: PullRequestSnapshotRow;
+  }) => Promise<void>;
   requestedByUserId: string | null;
   snapshotId: string;
 };
@@ -60,7 +74,7 @@ export async function generateAndPersistCodeReviewGuide(
 
   const config = getAgentsDaemonConfig();
 
-  await startCodeReviewGuideGeneration({
+  const startedGeneration = await startCodeReviewGuideGeneration({
     effort: config.ok ? config.config.defaultEffort : null,
     force: input.force ?? false,
     model: config.ok ? config.config.defaultModel : null,
@@ -68,9 +82,11 @@ export async function generateAndPersistCodeReviewGuide(
     requestedByUserId: input.requestedByUserId,
     snapshotId: input.snapshotId,
   });
+  await input.onStarted?.({ generation: startedGeneration, snapshot });
 
   if (!config.ok) {
-    await markGenerationFailed(input.snapshotId, config.message);
+    const failedGeneration = await markGenerationFailed(input.snapshotId, config.message);
+    await input.onFailed?.({ error: config.message, generation: failedGeneration, snapshot });
     throw new CodeReviewGuideGenerationError("configuration", config.message, 503);
   }
 
@@ -95,11 +111,13 @@ export async function generateAndPersistCodeReviewGuide(
       snapshotId: snapshot.id,
       status: "ready",
     });
+    await input.onReady?.({ generation, guide, snapshot });
 
     return { generation, guide };
   } catch (error) {
     const message = safeGenerationErrorMessage(error);
-    await markGenerationFailed(input.snapshotId, message);
+    const failedGeneration = await markGenerationFailed(input.snapshotId, message);
+    await input.onFailed?.({ error: message, generation: failedGeneration, snapshot });
 
     if (error instanceof AgentsDaemonClientError) {
       throw new CodeReviewGuideGenerationError("daemon", message, statusForDaemonError(error), error);

@@ -34,6 +34,12 @@ export type GitHubRestClientOptions = {
   token?: string | null;
 };
 
+export type GitHubIssueComment = {
+  body: string;
+  htmlUrl: string | null;
+  id: number;
+};
+
 export class GitHubRestClient {
   private readonly apiVersion: string;
   private readonly baseUrl: string;
@@ -72,6 +78,27 @@ export class GitHubRestClient {
       ...issueComments.map(normalizeIssueCommentResponse),
       ...reviewComments.map(normalizeReviewCommentResponse),
     ];
+  }
+
+  async listIssueComments(ref: GitHubPullRequestRef): Promise<GitHubIssueComment[]> {
+    const comments = await this.requestPaginated<GitHubIssueCommentResponse>(issueCommentsPath(ref));
+    return comments.map(normalizeIssueComment);
+  }
+
+  async createIssueComment(ref: GitHubPullRequestRef, body: string): Promise<GitHubIssueComment> {
+    const comment = await this.request<GitHubIssueCommentResponse>(issueCommentsPath(ref), {
+      body: { body },
+      method: "POST",
+    });
+    return normalizeIssueComment(comment);
+  }
+
+  async updateIssueComment(ref: GitHubPullRequestRef, commentId: string, body: string): Promise<GitHubIssueComment> {
+    const comment = await this.request<GitHubIssueCommentResponse>(issueCommentPath(ref, commentId), {
+      body: { body },
+      method: "PATCH",
+    });
+    return normalizeIssueComment(comment);
   }
 
   async getPullRequestSnapshot(ref: GitHubPullRequestRef): Promise<NormalizedPullRequestSnapshot> {
@@ -113,8 +140,8 @@ export class GitHubRestClient {
     return items;
   }
 
-  private async request<T>(path: string): Promise<T> {
-    const response = await this.requestRaw(path);
+  private async request<T>(path: string, init: { body?: unknown; method?: string } = {}): Promise<T> {
+    const response = await this.requestRaw(path, init);
     const body = (await readJson(response)) as unknown;
 
     if (!response.ok) {
@@ -124,17 +151,27 @@ export class GitHubRestClient {
     return body as T;
   }
 
-  private async requestRaw(path: string) {
+  private async requestRaw(path: string, init: { body?: unknown; method?: string } = {}) {
     if (!this.token) {
       throw missingGitHubAuthError();
     }
 
+    const headers: Record<string, string> = {
+      Accept: "application/vnd.github+json",
+      Authorization: `Bearer ${this.token}`,
+      "X-GitHub-Api-Version": this.apiVersion,
+    };
+
+    if (init.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+    }
+
     return this.fetcher(toGitHubUrl(path, this.baseUrl), {
+      body: init.body === undefined ? undefined : JSON.stringify(init.body),
       headers: {
-        Accept: "application/vnd.github+json",
-        Authorization: `Bearer ${this.token}`,
-        "X-GitHub-Api-Version": this.apiVersion,
+        ...headers,
       },
+      method: init.method,
     });
   }
 }
@@ -145,6 +182,18 @@ export function pullRequestPath(ref: GitHubPullRequestRef) {
 
 function issueCommentsPath(ref: GitHubPullRequestRef) {
   return `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/issues/${ref.number}/comments`;
+}
+
+function issueCommentPath(ref: GitHubPullRequestRef, commentId: string) {
+  return `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/issues/comments/${encodeURIComponent(commentId)}`;
+}
+
+function normalizeIssueComment(comment: GitHubIssueCommentResponse): GitHubIssueComment {
+  return {
+    body: comment.body ?? "",
+    htmlUrl: comment.html_url ?? null,
+    id: comment.id,
+  };
 }
 
 function toGitHubUrl(path: string, baseUrl: string) {

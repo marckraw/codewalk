@@ -236,6 +236,8 @@ export const codeReviewGuideGenerations = pgTable(
     force: boolean("force").default(false).notNull(),
     status: codeReviewGuideGenerationStatus("status").notNull(),
     error: text("error"),
+    githubCommentId: varchar("github_comment_id", { length: 191 }),
+    githubCommentUrl: text("github_comment_url"),
     startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

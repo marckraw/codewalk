@@ -62,5 +62,7 @@ describe("database schema", () => {
     expect(codeReviewGuideGenerations.guideId.name).toBe("guide_id");
     expect(codeReviewGuideGenerations.status.name).toBe("status");
     expect(codeReviewGuideGenerations.error.name).toBe("error");
+    expect(codeReviewGuideGenerations.githubCommentId.name).toBe("github_comment_id");
+    expect(codeReviewGuideGenerations.githubCommentUrl.name).toBe("github_comment_url");
   });
 });

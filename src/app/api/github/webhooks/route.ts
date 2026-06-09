@@ -3,7 +3,15 @@ import {
   CodeReviewGuideGenerationError,
   generateAndPersistCodeReviewGuide,
 } from "@/lib/code-review-guide-generation";
+import { updateCodeReviewGuideGenerationComment } from "@/lib/db/code-review-guide-generations";
 import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
+import {
+  buildCodewalkReviewCommentBody,
+  buildCodewalkReviewUrl,
+  getCodewalkAppBaseUrl,
+  upsertCodewalkReviewComment,
+  type CodewalkReviewCommentState,
+} from "@/lib/github/codewalk-review-comments";
 import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
 import { GitHubClientError } from "@/lib/github/server/errors";
 import {
@@ -58,6 +66,31 @@ export async function POST(request: Request) {
 
     try {
       const result = await generateAndPersistCodeReviewGuide({
+        onFailed: async ({ error, generation, snapshot }) => {
+          await postReviewComment({
+            error,
+            existingCommentId: generation.githubCommentId,
+            github,
+            snapshot,
+            state: "failed",
+          });
+        },
+        onReady: async ({ generation, snapshot }) => {
+          await postReviewComment({
+            existingCommentId: generation.githubCommentId,
+            github,
+            snapshot,
+            state: "ready",
+          });
+        },
+        onStarted: async ({ generation, snapshot }) => {
+          await postReviewComment({
+            existingCommentId: generation.githubCommentId,
+            github,
+            snapshot,
+            state: "preparing",
+          });
+        },
         requestedByUserId: null,
         snapshotId: persistedSnapshot.id,
       });
@@ -113,4 +146,42 @@ function statusForGitHubError(error: GitHubClientError) {
   if (error.code === "not_found") return 404;
   if (error.code === "rate_limited") return 429;
   return 502;
+}
+
+async function postReviewComment(input: {
+  error?: string | null;
+  existingCommentId: string | null;
+  github: ReturnType<typeof createServerGitHubRestClient>;
+  snapshot: {
+    id: string;
+    number: number;
+    owner: string;
+    repo: string;
+  };
+  state: CodewalkReviewCommentState;
+}) {
+  const reviewUrl = buildCodewalkReviewUrl({
+    appBaseUrl: getCodewalkAppBaseUrl(),
+    snapshotId: input.snapshot.id,
+  });
+  const comment = await upsertCodewalkReviewComment({
+    body: buildCodewalkReviewCommentBody({
+      error: input.error,
+      reviewUrl,
+      state: input.state,
+    }),
+    existingCommentId: input.existingCommentId,
+    github: input.github,
+    pullRequest: {
+      number: input.snapshot.number,
+      owner: input.snapshot.owner,
+      repo: input.snapshot.repo,
+    },
+  });
+
+  await updateCodeReviewGuideGenerationComment({
+    githubCommentId: String(comment.id),
+    githubCommentUrl: comment.htmlUrl,
+    snapshotId: input.snapshot.id,
+  });
 }

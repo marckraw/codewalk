@@ -28,7 +28,7 @@ describe("GitHubRestClient", () => {
       title: "Import pull request snapshots",
     });
 
-    expect(requests).toEqual([
+    expect(requests).toMatchObject([
       {
         authorization: "Bearer gh-test-token",
         url: "https://api.github.com/repos/openai/codex/pulls/24",
@@ -111,6 +111,37 @@ describe("GitHubRestClient", () => {
     ]);
   });
 
+  it("creates and updates PR issue comments", async () => {
+    const { client, requests } = createClient([
+      jsonResponse({ body: "Preparing", html_url: "https://github.com/openai/codex/pull/24#issuecomment-1", id: 1 }),
+      jsonResponse({ body: "Ready", html_url: "https://github.com/openai/codex/pull/24#issuecomment-1", id: 1 }),
+    ]);
+
+    await expect(client.createIssueComment(ref, "Preparing")).resolves.toEqual({
+      body: "Preparing",
+      htmlUrl: "https://github.com/openai/codex/pull/24#issuecomment-1",
+      id: 1,
+    });
+    await expect(client.updateIssueComment(ref, "1", "Ready")).resolves.toEqual({
+      body: "Ready",
+      htmlUrl: "https://github.com/openai/codex/pull/24#issuecomment-1",
+      id: 1,
+    });
+
+    expect(requests).toMatchObject([
+      {
+        body: JSON.stringify({ body: "Preparing" }),
+        method: "POST",
+        url: "https://api.github.com/repos/openai/codex/issues/24/comments",
+      },
+      {
+        body: JSON.stringify({ body: "Ready" }),
+        method: "PATCH",
+        url: "https://api.github.com/repos/openai/codex/issues/comments/1",
+      },
+    ]);
+  });
+
   it("requires a GitHub token before calling the API", async () => {
     const fetcher = vi.fn<typeof fetch>();
     const client = new GitHubRestClient({ fetcher, token: null });
@@ -140,6 +171,8 @@ describe("GitHubRestClient", () => {
 
 type RequestRecord = {
   authorization: string | null;
+  body: string | null;
+  method: string | undefined;
   url: string;
   version: string | null;
 };
@@ -152,6 +185,8 @@ function createClient(responses: Response[]) {
 
     requests.push({
       authorization: headers.get("authorization"),
+      body: init?.body ? String(init.body) : null,
+      method: init?.method,
       url: String(input),
       version: headers.get("x-github-api-version"),
     });
