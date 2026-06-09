@@ -22,8 +22,10 @@ export function listReviewWorkspaceRepos(items: ReviewWorkspaceSummary[]): strin
 
 export function filterReviewWorkspaceSummaries(
   items: ReviewWorkspaceSummary[],
-  filters: { repo: ReviewRepoFilter; status: ReviewStatusFilter },
+  filters: { query?: string; repo: ReviewRepoFilter; status: ReviewStatusFilter },
 ): ReviewWorkspaceSummary[] {
+  const query = normalizeReviewSearchQuery(filters.query ?? "");
+
   return items.filter((item) => {
     if (filters.status !== "all" && item.status !== filters.status) {
       return false;
@@ -33,8 +35,38 @@ export function filterReviewWorkspaceSummaries(
       return false;
     }
 
-    return true;
+    return matchesReviewSearchQuery(item, query);
   });
+}
+
+export function normalizeReviewSearchQuery(query: string): string {
+  return query.trim().toLowerCase();
+}
+
+/**
+ * Case-insensitive substring match across the fields a reviewer is likely to
+ * remember: title, owner/repo, PR number (`186` or `#186`), branches, author.
+ */
+export function matchesReviewSearchQuery(
+  item: Pick<ReviewWorkspaceSummary, "authorLogin" | "baseRef" | "headRef" | "number" | "owner" | "repo" | "title">,
+  normalizedQuery: string,
+): boolean {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  const haystack = [
+    item.title,
+    reviewWorkspaceRepoKey(item),
+    `#${item.number}`,
+    item.baseRef,
+    item.headRef,
+    item.authorLogin ?? "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term));
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

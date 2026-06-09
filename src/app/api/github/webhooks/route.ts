@@ -22,7 +22,7 @@ import {
 } from "@/lib/github/webhook";
 import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/lib/observability";
 
-export const maxDuration = 300;
+export const maxDuration = 800;
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {

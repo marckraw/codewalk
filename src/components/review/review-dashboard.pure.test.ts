@@ -65,6 +65,44 @@ describe("filterReviewWorkspaceSummaries", () => {
     const result = filterReviewWorkspaceSummaries(items, { repo: "ef-global/backpack", status: "preparing" });
     expect(result.map((item) => item.id)).toEqual(["b"]);
   });
+
+  it("searches across title, repo, number, branches, and author", () => {
+    const searchable = [
+      summary({ authorLogin: "marckraw", headRef: "fix/header-clip", id: "a", number: 186, title: "feat(NavigationBar): add component" }),
+      summary({ authorLogin: "octocat", id: "b", number: 42, owner: "acme", repo: "widgets", title: "Fix tooltip overflow" }),
+    ];
+
+    const byTitle = filterReviewWorkspaceSummaries(searchable, { query: "navigationbar", repo: "all", status: "all" });
+    expect(byTitle.map((item) => item.id)).toEqual(["a"]);
+
+    const byNumber = filterReviewWorkspaceSummaries(searchable, { query: "#186", repo: "all", status: "all" });
+    expect(byNumber.map((item) => item.id)).toEqual(["a"]);
+
+    const byRepo = filterReviewWorkspaceSummaries(searchable, { query: "acme/widgets", repo: "all", status: "all" });
+    expect(byRepo.map((item) => item.id)).toEqual(["b"]);
+
+    const byBranch = filterReviewWorkspaceSummaries(searchable, { query: "header-clip", repo: "all", status: "all" });
+    expect(byBranch.map((item) => item.id)).toEqual(["a"]);
+
+    const byAuthor = filterReviewWorkspaceSummaries(searchable, { query: "octocat", repo: "all", status: "all" });
+    expect(byAuthor.map((item) => item.id)).toEqual(["b"]);
+  });
+
+  it("requires every search term to match and ignores blank queries", () => {
+    const searchable = [
+      summary({ id: "a", number: 186, title: "feat(NavigationBar): add component" }),
+      summary({ id: "b", number: 42, title: "Fix NavigationBar tooltip" }),
+    ];
+
+    const combined = filterReviewWorkspaceSummaries(searchable, { query: "navigationbar 186", repo: "all", status: "all" });
+    expect(combined.map((item) => item.id)).toEqual(["a"]);
+
+    const blank = filterReviewWorkspaceSummaries(searchable, { query: "   ", repo: "all", status: "all" });
+    expect(blank).toHaveLength(2);
+
+    const miss = filterReviewWorkspaceSummaries(searchable, { query: "does-not-exist", repo: "all", status: "all" });
+    expect(miss).toHaveLength(0);
+  });
 });
 
 describe("formatRelativeReviewTime", () => {

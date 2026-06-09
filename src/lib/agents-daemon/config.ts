@@ -4,7 +4,10 @@ import type { CodeReviewGuideProvider } from "@/lib/db/schema";
 import { resolvePositiveIntegerEnv } from "@/lib/server-env";
 import { resolveAgentsDaemonBaseUrl } from "./protocol";
 
-export const DEFAULT_AGENTS_DAEMON_REQUEST_TIMEOUT_MS = 240_000;
+// Large PRs (~100 files) routinely exceed 4 minutes of daemon work, so allow
+// 10 minutes by default. Must stay below the route `maxDuration` (800s) so the
+// timeout fires and persists a failed status before Vercel kills the function.
+export const DEFAULT_AGENTS_DAEMON_REQUEST_TIMEOUT_MS = 600_000;
 
 export type AgentsDaemonConfig = {
   apiToken: string;

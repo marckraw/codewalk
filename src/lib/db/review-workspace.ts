@@ -33,6 +33,36 @@ export type ReviewWorkspaceData = {
   state: ReviewWorkspaceState;
 };
 
+/**
+ * A "running" generation older than this is presented as failed: the serverless
+ * function that owned it cannot still be alive (daemon timeout is 600s and the
+ * route maxDuration is 800s), so the row will never reach a terminal state on
+ * its own — without this, the UI would show "preparing" and poll forever.
+ */
+export const STALE_RUNNING_GENERATION_THRESHOLD_MS = 20 * 60 * 1000;
+
+export const STALE_RUNNING_GENERATION_ERROR =
+  "Guide generation was interrupted on the server. Retry to start a new run.";
+
+/**
+ * Present a generation row for reading: rows stuck in "running" past the
+ * staleness threshold are surfaced as failed (read-only — the row itself is
+ * not rewritten; a retry overwrites it via the regular start flow).
+ */
+export function presentCodeReviewGuideGeneration<
+  T extends Pick<CodeReviewGuideGenerationRow, "error" | "startedAt" | "status">,
+>(generation: T | null, now = new Date()): T | null {
+  if (!generation || generation.status !== "running") {
+    return generation;
+  }
+
+  if (now.getTime() - generation.startedAt.getTime() <= STALE_RUNNING_GENERATION_THRESHOLD_MS) {
+    return generation;
+  }
+
+  return { ...generation, error: STALE_RUNNING_GENERATION_ERROR, status: "failed" };
+}
+
 export function deriveReviewWorkspaceState(input: {
   generation: Pick<CodeReviewGuideGenerationRow, "status"> | null;
   guide: Pick<CodeReviewGuideRow, "status"> | null;
@@ -114,7 +144,7 @@ export async function listReviewWorkspaces(input?: { limit?: number }): Promise<
   const fileCountBySnapshot = new Map(fileCounts.map((row) => [row.snapshotId, Number(row.total)]));
 
   return snapshots.map((snapshot) => {
-    const generation = generationBySnapshot.get(snapshot.id) ?? null;
+    const generation = presentCodeReviewGuideGeneration(generationBySnapshot.get(snapshot.id) ?? null);
     const guide = latestGuideBySnapshot.get(snapshot.id) ?? null;
     const generationUpdatedAt = generation?.updatedAt ?? null;
 
@@ -148,26 +178,27 @@ export async function getReviewWorkspace(snapshotId: string): Promise<ReviewWork
     return null;
   }
 
-  const [files, generation] = await Promise.all([
+  const [files, generationRow] = await Promise.all([
     db.select().from(pullRequestFiles).where(eq(pullRequestFiles.snapshotId, snapshotId)).orderBy(asc(pullRequestFiles.path)),
     db.query.codeReviewGuideGenerations.findFirst({
       orderBy: desc(codeReviewGuideGenerations.updatedAt),
       where: eq(codeReviewGuideGenerations.snapshotId, snapshotId),
     }),
   ]);
+  const generation = presentCodeReviewGuideGeneration(generationRow ?? null);
 
   const guide = await getWorkspaceGuide({
-    generation: generation ?? null,
+    generation,
     snapshotId,
   });
 
   return {
     files,
-    generation: generation ?? null,
+    generation,
     guide,
     snapshot,
     state: deriveReviewWorkspaceState({
-      generation: generation ?? null,
+      generation,
       guide,
     }),
   };

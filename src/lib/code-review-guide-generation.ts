@@ -64,9 +64,29 @@ export function buildRepositoryUrlFromSnapshot(snapshot: Pick<PullRequestSnapsho
   return `https://github.com/${snapshot.owner}/${snapshot.repo}`;
 }
 
+export type StartCodeReviewGuideGenerationRunResult = {
+  /**
+   * Runs the daemon round-trip and persists the outcome. Intended to be
+   * scheduled via `after()` so the HTTP response is not held open for the
+   * whole generation; the run survives the client closing the page because
+   * its status lives in the `code_review_guide_generations` row.
+   */
+  complete: () => Promise<GenerateCodeReviewGuideResult>;
+  generation: Awaited<ReturnType<typeof startCodeReviewGuideGeneration>>;
+  snapshot: PullRequestSnapshotRow;
+};
+
 export async function generateAndPersistCodeReviewGuide(
   input: GenerateCodeReviewGuideInput,
 ): Promise<GenerateCodeReviewGuideResult> {
+  const run = await startCodeReviewGuideGenerationRun(input);
+
+  return run.complete();
+}
+
+export async function startCodeReviewGuideGenerationRun(
+  input: GenerateCodeReviewGuideInput,
+): Promise<StartCodeReviewGuideGenerationRunResult> {
   const snapshot = await getPullRequestSnapshotById(input.snapshotId);
 
   if (!snapshot) {
@@ -108,9 +128,22 @@ export async function generateAndPersistCodeReviewGuide(
     throw new CodeReviewGuideGenerationError("configuration", config.message, 503);
   }
 
+  return {
+    complete: () => completeCodeReviewGuideGeneration(input, snapshot, config, startedGeneration.id),
+    generation: startedGeneration,
+    snapshot,
+  };
+}
+
+async function completeCodeReviewGuideGeneration(
+  input: GenerateCodeReviewGuideInput,
+  snapshot: PullRequestSnapshotRow,
+  config: Extract<AgentsDaemonConfigResult, { ok: true }>,
+  generationId: string,
+): Promise<GenerateCodeReviewGuideResult> {
   try {
     logCodewalkEvent("codewalk.guide_generation.daemon_request_started", {
-      generationId: startedGeneration.id,
+      generationId,
       model: config.config.defaultModel,
       owner: snapshot.owner,
       provider: config.config.defaultProvider,

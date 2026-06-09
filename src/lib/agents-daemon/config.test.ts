@@ -20,7 +20,7 @@ describe("getAgentsDaemonConfig", () => {
         defaultEffort: "high",
         defaultModel: "gpt-5.4",
         defaultProvider: "codex",
-        requestTimeoutMs: 240000,
+        requestTimeoutMs: 600000,
       },
       ok: true,
     });
@@ -52,7 +52,7 @@ describe("getAgentsDaemonConfig", () => {
       }),
     ).toMatchObject({
       config: {
-        requestTimeoutMs: 240000,
+        requestTimeoutMs: 600000,
       },
       ok: true,
     });

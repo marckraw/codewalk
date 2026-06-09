@@ -1,13 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useSyncExternalStore } from "react";
-import { ArrowUpRight, GitPullRequestArrow } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { ArrowUpRight, GitPullRequestArrow, Search } from "lucide-react";
 import { CodeReviewGuideGenerationControl } from "@/components/code-review-guide-generation-control";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TextField } from "@/components/ui/text-field";
 import { cn } from "@/lib/cn";
 import type { ReviewWorkspaceState, ReviewWorkspaceSummary } from "@/lib/db/review-workspace";
+import { REVIEW_WORKSPACE_POLL_INTERVAL_MS } from "./use-review-workspace-live.pure";
 import {
   filterReviewWorkspaceSummaries,
   formatAbsoluteReviewDate,
@@ -55,6 +58,7 @@ function subscribeNow(callback: () => void) {
 export function ReviewDashboard({ items }: ReviewDashboardProps) {
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>("all");
   const [repoFilter, setRepoFilter] = useState<ReviewRepoFilter>("all");
+  const [query, setQuery] = useState("");
   const nowMs = useSyncExternalStore(
     subscribeNow,
     () => cachedNowMs,
@@ -62,15 +66,40 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
   );
   const now = nowMs ? new Date(nowMs) : null;
 
+  // While any guide is being prepared, re-render from the server on the same
+  // cadence as the workspace poller so rows flip to ready/failed on their own.
+  const router = useRouter();
+  const hasPreparing = items.some((item) => item.status === "preparing");
+  useEffect(() => {
+    if (!hasPreparing) {
+      return;
+    }
+
+    const timer = setInterval(() => router.refresh(), REVIEW_WORKSPACE_POLL_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [hasPreparing, router]);
+
   const repos = useMemo(() => listReviewWorkspaceRepos(items), [items]);
   const statusCounts = useMemo(() => countByStatus(items), [items]);
   const visibleItems = useMemo(
-    () => filterReviewWorkspaceSummaries(items, { repo: repoFilter, status: statusFilter }),
-    [items, repoFilter, statusFilter],
+    () => filterReviewWorkspaceSummaries(items, { query, repo: repoFilter, status: statusFilter }),
+    [items, query, repoFilter, statusFilter],
   );
 
   return (
     <div className="grid gap-3 p-3">
+      <div className="relative">
+        <Search aria-hidden="true" className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-[var(--muted)]" />
+        <TextField
+          aria-label="Search reviews"
+          className="h-9 w-full pl-9"
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search by title, repo, #number, branch, or author"
+          type="search"
+          value={query}
+        />
+      </div>
+
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1">
           {REVIEW_STATUS_FILTERS.map((filter) => {

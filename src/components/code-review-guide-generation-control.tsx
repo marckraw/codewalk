@@ -65,9 +65,9 @@ export function CodeReviewGuideGenerationControl({
       }
 
       // When a polling owner is wired up it refreshes the workspace in place;
-      // otherwise fall back to a server re-render.
+      // otherwise (dashboard) re-render on the server so the row flips to
+      // "preparing" — generation now continues in the background.
       if (!onGenerationStart) {
-        router.replace(`/review/${encodeURIComponent(snapshotId)}`);
         router.refresh();
       }
     } catch {
