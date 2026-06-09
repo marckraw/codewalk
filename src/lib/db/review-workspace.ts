@@ -1,6 +1,6 @@
 import "server-only";
 
-import { asc, desc, eq, inArray } from "drizzle-orm";
+import { asc, count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "./client";
 import {
   codeReviewGuideGenerations,
@@ -50,6 +50,90 @@ export function deriveReviewWorkspaceState(input: {
   }
 
   return "imported";
+}
+
+export type ReviewWorkspaceSummary = {
+  authorLogin: string | null;
+  baseRef: string;
+  fileCount: number;
+  headRef: string;
+  id: string;
+  number: number;
+  owner: string;
+  prState: string;
+  repo: string;
+  status: ReviewWorkspaceState;
+  title: string;
+  updatedAt: Date;
+  url: string;
+};
+
+const REVIEW_WORKSPACE_LIST_LIMIT = 50;
+
+/**
+ * List recent PR snapshots with their derived guide status, newest first.
+ * Powers the review dashboard so generated reviews can be found without
+ * re-importing a PR URL.
+ */
+export async function listReviewWorkspaces(input?: { limit?: number }): Promise<ReviewWorkspaceSummary[]> {
+  const db = getDb();
+  const limit = Math.min(Math.max(input?.limit ?? REVIEW_WORKSPACE_LIST_LIMIT, 1), 100);
+
+  const snapshots = await db
+    .select()
+    .from(pullRequestSnapshots)
+    .orderBy(desc(pullRequestSnapshots.updatedAt))
+    .limit(limit);
+
+  if (snapshots.length === 0) {
+    return [];
+  }
+
+  const snapshotIds = snapshots.map((snapshot) => snapshot.id);
+  const [generations, guideRows, fileCounts] = await Promise.all([
+    db.select().from(codeReviewGuideGenerations).where(inArray(codeReviewGuideGenerations.snapshotId, snapshotIds)),
+    db
+      .select({ snapshotId: guides.snapshotId, status: guides.status, updatedAt: guides.updatedAt })
+      .from(guides)
+      .where(inArray(guides.snapshotId, snapshotIds)),
+    db
+      .select({ snapshotId: pullRequestFiles.snapshotId, total: count() })
+      .from(pullRequestFiles)
+      .where(inArray(pullRequestFiles.snapshotId, snapshotIds))
+      .groupBy(pullRequestFiles.snapshotId),
+  ]);
+
+  const generationBySnapshot = new Map(generations.map((generation) => [generation.snapshotId, generation]));
+  const latestGuideBySnapshot = new Map<string, { status: CodeReviewGuideRow["status"]; updatedAt: Date }>();
+  for (const guide of guideRows) {
+    const current = latestGuideBySnapshot.get(guide.snapshotId);
+    if (!current || guide.updatedAt > current.updatedAt) {
+      latestGuideBySnapshot.set(guide.snapshotId, guide);
+    }
+  }
+  const fileCountBySnapshot = new Map(fileCounts.map((row) => [row.snapshotId, Number(row.total)]));
+
+  return snapshots.map((snapshot) => {
+    const generation = generationBySnapshot.get(snapshot.id) ?? null;
+    const guide = latestGuideBySnapshot.get(snapshot.id) ?? null;
+    const generationUpdatedAt = generation?.updatedAt ?? null;
+
+    return {
+      authorLogin: snapshot.authorLogin,
+      baseRef: snapshot.baseRef,
+      fileCount: fileCountBySnapshot.get(snapshot.id) ?? 0,
+      headRef: snapshot.headRef,
+      id: snapshot.id,
+      number: snapshot.number,
+      owner: snapshot.owner,
+      prState: snapshot.state,
+      repo: snapshot.repo,
+      status: deriveReviewWorkspaceState({ generation, guide }),
+      title: snapshot.title,
+      updatedAt: generationUpdatedAt && generationUpdatedAt > snapshot.updatedAt ? generationUpdatedAt : snapshot.updatedAt,
+      url: snapshot.url,
+    };
+  });
 }
 
 export async function getReviewWorkspace(snapshotId: string): Promise<ReviewWorkspaceData | null> {
