@@ -1,0 +1,130 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type { GitHubPullRequestRef } from "./pull-request-url";
+
+export type GitHubWebhookConfig =
+  | {
+      allowedOwner: string;
+      botToken: string;
+      ok: true;
+      secret: string;
+    }
+  | {
+      message: string;
+      missingKeys: string[];
+      ok: false;
+    };
+
+export type GitHubPullRequestWebhookAction = "opened" | "reopened" | "synchronize" | "ready_for_review";
+
+export type GitHubPullRequestWebhookResolution =
+  | {
+      action: GitHubPullRequestWebhookAction;
+      pullRequest: GitHubPullRequestRef;
+      ok: true;
+    }
+  | {
+      ok: false;
+      reason: "ignored-action" | "ignored-event" | "invalid-payload" | "outside-allowed-owner";
+    };
+
+export function getGitHubWebhookConfig(env: Record<string, string | undefined> = process.env): GitHubWebhookConfig {
+  const secret = env.GITHUB_WEBHOOK_SECRET?.trim() ?? "";
+  const botToken = env.GITHUB_BOT_TOKEN?.trim() ?? "";
+  const allowedOwner = env.GITHUB_ALLOWED_OWNER?.trim() ?? "";
+  const missingKeys = [
+    secret ? null : "GITHUB_WEBHOOK_SECRET",
+    botToken ? null : "GITHUB_BOT_TOKEN",
+    allowedOwner ? null : "GITHUB_ALLOWED_OWNER",
+  ].filter((key): key is string => Boolean(key));
+
+  if (missingKeys.length > 0) {
+    return {
+      message: `GitHub webhook configuration is missing: ${missingKeys.join(", ")}.`,
+      missingKeys,
+      ok: false,
+    };
+  }
+
+  return {
+    allowedOwner,
+    botToken,
+    ok: true,
+    secret,
+  };
+}
+
+export function verifyGitHubWebhookSignature(input: {
+  payload: string;
+  secret: string;
+  signatureHeader: string | null;
+}) {
+  const header = input.signatureHeader?.trim() ?? "";
+
+  if (!header.startsWith("sha256=")) {
+    return false;
+  }
+
+  const expected = `sha256=${createHmac("sha256", input.secret).update(input.payload).digest("hex")}`;
+  const expectedBuffer = Buffer.from(expected);
+  const actualBuffer = Buffer.from(header);
+
+  if (expectedBuffer.byteLength !== actualBuffer.byteLength) {
+    return false;
+  }
+
+  return timingSafeEqual(expectedBuffer, actualBuffer);
+}
+
+export function resolveGitHubPullRequestWebhook(input: {
+  allowedOwner: string;
+  event: string | null;
+  payload: unknown;
+}): GitHubPullRequestWebhookResolution {
+  if (input.event !== "pull_request") {
+    return { ok: false, reason: "ignored-event" };
+  }
+
+  const payload = asRecord(input.payload);
+  const action = typeof payload?.action === "string" ? payload.action : null;
+
+  if (!isHandledPullRequestAction(action)) {
+    return { ok: false, reason: "ignored-action" };
+  }
+
+  const repository = asRecord(payload?.repository);
+  const owner = asRecord(repository?.owner);
+  const pullRequest = asRecord(payload?.pull_request);
+  const repoOwner = typeof owner?.login === "string" ? owner.login : null;
+  const repoName = typeof repository?.name === "string" ? repository.name : null;
+  const number = typeof pullRequest?.number === "number" ? pullRequest.number : null;
+
+  if (!repoOwner || !repoName || !number || !Number.isInteger(number) || number < 1) {
+    return { ok: false, reason: "invalid-payload" };
+  }
+
+  if (repoOwner.toLowerCase() !== input.allowedOwner.toLowerCase()) {
+    return { ok: false, reason: "outside-allowed-owner" };
+  }
+
+  return {
+    action,
+    ok: true,
+    pullRequest: {
+      number,
+      owner: repoOwner,
+      repo: repoName,
+    },
+  };
+}
+
+function isHandledPullRequestAction(value: string | null): value is GitHubPullRequestWebhookAction {
+  return value === "opened" || value === "reopened" || value === "synchronize" || value === "ready_for_review";
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+
+  return null;
+}

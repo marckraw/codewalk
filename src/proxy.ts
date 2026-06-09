@@ -4,9 +4,10 @@ import { PROTECTED_ROUTE_PATTERNS } from "@/lib/auth/protected-routes";
 import { isClerkServerConfigured } from "@/lib/auth/server-config";
 
 const isProtectedRoute = createRouteMatcher(PROTECTED_ROUTE_PATTERNS);
+const publicApiPaths = new Set(["/api/github/webhooks"]);
 
 const configuredClerkMiddleware = clerkMiddleware(async (auth, req) => {
-  if (isProtectedRoute(req)) {
+  if (isProtectedRoute(req) && !publicApiPaths.has(req.nextUrl.pathname)) {
     await auth.protect();
   }
 });
