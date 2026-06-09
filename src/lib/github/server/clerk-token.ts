@@ -22,6 +22,10 @@ export async function getCurrentUserGitHubAccessToken() {
 }
 
 export async function createCurrentUserGitHubRestClient() {
+  const { getGitHubRequestTimeoutMs } = await import("./config");
   const { GitHubRestClient } = await import("./rest-client");
-  return new GitHubRestClient({ token: await getCurrentUserGitHubAccessToken() });
+  return new GitHubRestClient({
+    timeoutMs: getGitHubRequestTimeoutMs(),
+    token: await getCurrentUserGitHubAccessToken(),
+  });
 }

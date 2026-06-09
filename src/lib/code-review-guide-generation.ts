@@ -14,6 +14,7 @@ import {
 } from "@/lib/db/code-review-guide-generations";
 import { persistCodeReviewGuide, type CodeReviewGuide } from "@/lib/db/code-review-guides";
 import { getPullRequestSnapshotById, type PullRequestSnapshotRow } from "@/lib/db/pull-request-snapshots";
+import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/lib/observability";
 
 export type GenerateCodeReviewGuideInput = {
   force?: boolean;
@@ -82,15 +83,42 @@ export async function generateAndPersistCodeReviewGuide(
     requestedByUserId: input.requestedByUserId,
     snapshotId: input.snapshotId,
   });
+  logCodewalkEvent("codewalk.guide_generation.started", {
+    force: input.force ?? false,
+    generationId: startedGeneration.id,
+    owner: snapshot.owner,
+    pullRequestNumber: snapshot.number,
+    repo: snapshot.repo,
+    requestedByUser: Boolean(input.requestedByUserId),
+    snapshotId: snapshot.id,
+  });
   await input.onStarted?.({ generation: startedGeneration, snapshot });
 
   if (!config.ok) {
     const failedGeneration = await markGenerationFailed(input.snapshotId, config.message);
+    logCodewalkWarning("codewalk.guide_generation.configuration_failed", {
+      generationId: failedGeneration.id,
+      owner: snapshot.owner,
+      pullRequestNumber: snapshot.number,
+      repo: snapshot.repo,
+      snapshotId: snapshot.id,
+      state: config.state,
+    });
     await input.onFailed?.({ error: config.message, generation: failedGeneration, snapshot });
     throw new CodeReviewGuideGenerationError("configuration", config.message, 503);
   }
 
   try {
+    logCodewalkEvent("codewalk.guide_generation.daemon_request_started", {
+      generationId: startedGeneration.id,
+      model: config.config.defaultModel,
+      owner: snapshot.owner,
+      provider: config.config.defaultProvider,
+      pullRequestNumber: snapshot.number,
+      repo: snapshot.repo,
+      requestTimeoutMs: config.config.requestTimeoutMs,
+      snapshotId: snapshot.id,
+    });
     const client = createClient(config);
     const result = await client.generateCodeReviewGuide({
       effort: config.config.defaultEffort,
@@ -111,12 +139,29 @@ export async function generateAndPersistCodeReviewGuide(
       snapshotId: snapshot.id,
       status: "ready",
     });
+    logCodewalkEvent("codewalk.guide_generation.ready", {
+      generationId: generation.id,
+      guideId: guide.id,
+      owner: snapshot.owner,
+      pullRequestNumber: snapshot.number,
+      repo: snapshot.repo,
+      snapshotId: snapshot.id,
+    });
     await input.onReady?.({ generation, guide, snapshot });
 
     return { generation, guide };
   } catch (error) {
     const message = safeGenerationErrorMessage(error);
     const failedGeneration = await markGenerationFailed(input.snapshotId, message);
+    logCodewalkError("codewalk.guide_generation.failed", {
+      error,
+      generationId: failedGeneration.id,
+      message,
+      owner: snapshot.owner,
+      pullRequestNumber: snapshot.number,
+      repo: snapshot.repo,
+      snapshotId: snapshot.id,
+    });
     await input.onFailed?.({ error: message, generation: failedGeneration, snapshot });
 
     if (error instanceof AgentsDaemonClientError) {

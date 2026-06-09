@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   CodeReviewGuideGenerationError,
   generateAndPersistCodeReviewGuide,
@@ -19,11 +19,18 @@ import {
   resolveGitHubPullRequestWebhook,
   verifyGitHubWebhookSignature,
 } from "@/lib/github/webhook";
+import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/lib/observability";
+
+export const maxDuration = 300;
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   const config = getGitHubWebhookConfig();
 
   if (!config.ok) {
+    logCodewalkWarning("codewalk.github_webhook.configuration_failed", {
+      missingKeys: config.missingKeys,
+    });
     return NextResponse.json({ error: config.message, missingKeys: config.missingKeys }, { status: 503 });
   }
 
@@ -35,6 +42,7 @@ export async function POST(request: Request) {
   });
 
   if (!signatureIsValid) {
+    logCodewalkWarning("codewalk.github_webhook.invalid_signature");
     return NextResponse.json({ error: "Invalid GitHub webhook signature." }, { status: 401 });
   }
 
@@ -43,6 +51,7 @@ export async function POST(request: Request) {
   try {
     payload = JSON.parse(payloadText);
   } catch {
+    logCodewalkWarning("codewalk.github_webhook.invalid_json");
     return NextResponse.json({ error: "GitHub webhook payload must be JSON." }, { status: 400 });
   }
 
@@ -53,53 +62,55 @@ export async function POST(request: Request) {
   });
 
   if (!resolved.ok) {
+    logCodewalkEvent("codewalk.github_webhook.ignored", {
+      event: request.headers.get("x-github-event"),
+      reason: resolved.reason,
+    });
     return NextResponse.json({ reason: resolved.reason, status: "ignored" }, { status: 202 });
   }
 
   try {
+    logCodewalkEvent("codewalk.github_webhook.accepted", {
+      action: resolved.action,
+      owner: resolved.pullRequest.owner,
+      pullRequestNumber: resolved.pullRequest.number,
+      repo: resolved.pullRequest.repo,
+    });
     const github = createServerGitHubRestClient(config.botToken);
     const snapshot = await github.getPullRequestSnapshot(resolved.pullRequest);
     const persistedSnapshot = await persistPullRequestSnapshot({
       importedByUserId: null,
       snapshot,
     });
+    logCodewalkEvent("codewalk.github_webhook.snapshot_persisted", {
+      headSha: persistedSnapshot.headSha,
+      owner: persistedSnapshot.owner,
+      pullRequestNumber: persistedSnapshot.number,
+      repo: persistedSnapshot.repo,
+      snapshotId: persistedSnapshot.id,
+    });
 
-    try {
-      const result = await generateAndPersistCodeReviewGuide({
-        onFailed: async ({ error, generation, snapshot }) => {
-          await postReviewComment({
-            error,
-            existingCommentId: generation.githubCommentId,
-            github,
-            snapshot,
-            state: "failed",
-          });
-        },
-        onReady: async ({ generation, snapshot }) => {
-          await postReviewComment({
-            existingCommentId: generation.githubCommentId,
-            github,
-            snapshot,
-            state: "ready",
-          });
-        },
-        onStarted: async ({ generation, snapshot }) => {
-          await postReviewComment({
-            existingCommentId: generation.githubCommentId,
-            github,
-            snapshot,
-            state: "preparing",
-          });
-        },
-        requestedByUserId: null,
-        snapshotId: persistedSnapshot.id,
+    const preparingComment = await postReviewComment({
+      existingCommentId: null,
+      github,
+      persistGenerationComment: false,
+      snapshot: persistedSnapshot,
+      state: "preparing",
+    });
+
+    after(async () => {
+      await generatePersistedSnapshotGuide({
+        github,
+        preparingCommentId: String(preparingComment.id),
+        snapshot: persistedSnapshot,
       });
+    });
 
-      return NextResponse.json({
-        generation: {
-          guideId: result.generation.guideId,
-          id: result.generation.id,
-          status: result.generation.status,
+    return NextResponse.json(
+      {
+        comment: {
+          id: preparingComment.id,
+          url: preparingComment.htmlUrl,
         },
         snapshot: {
           headSha: persistedSnapshot.headSha,
@@ -108,35 +119,102 @@ export async function POST(request: Request) {
           owner: persistedSnapshot.owner,
           repo: persistedSnapshot.repo,
         },
-        status: "generated",
-      });
-    } catch (error) {
-      if (error instanceof CodeReviewGuideGenerationError) {
-        return NextResponse.json(
-          {
-            code: error.code,
-            error: error.message,
-            snapshot: {
-              headSha: persistedSnapshot.headSha,
-              id: persistedSnapshot.id,
-              number: persistedSnapshot.number,
-              owner: persistedSnapshot.owner,
-              repo: persistedSnapshot.repo,
-            },
-            status: "generation_failed",
-          },
-          { status: 202 },
-        );
-      }
-
-      throw error;
-    }
+        status: "queued",
+      },
+      { status: 202 },
+    );
   } catch (error) {
     if (error instanceof GitHubClientError) {
+      logCodewalkError("codewalk.github_webhook.github_failed", {
+        code: error.code,
+        error,
+        message: error.message,
+        pullRequestNumber: resolved.pullRequest.number,
+        repo: resolved.pullRequest.repo,
+      });
       return NextResponse.json({ code: error.code, error: error.message }, { status: statusForGitHubError(error) });
     }
 
+    logCodewalkError("codewalk.github_webhook.unexpected_failed", {
+      error,
+      pullRequestNumber: resolved.pullRequest.number,
+      repo: resolved.pullRequest.repo,
+    });
     throw error;
+  }
+}
+
+async function generatePersistedSnapshotGuide(input: {
+  github: ReturnType<typeof createServerGitHubRestClient>;
+  preparingCommentId: string;
+  snapshot: {
+    headSha: string;
+    id: string;
+    number: number;
+    owner: string;
+    repo: string;
+  };
+}) {
+  try {
+    const result = await generateAndPersistCodeReviewGuide({
+      onFailed: async ({ error, generation, snapshot }) => {
+        await postReviewComment({
+          error,
+          existingCommentId: generation.githubCommentId ?? input.preparingCommentId,
+          github: input.github,
+          snapshot,
+          state: "failed",
+        });
+      },
+      onReady: async ({ generation, snapshot }) => {
+        await postReviewComment({
+          existingCommentId: generation.githubCommentId ?? input.preparingCommentId,
+          github: input.github,
+          snapshot,
+          state: "ready",
+        });
+      },
+      onStarted: async ({ generation, snapshot }) => {
+        await postReviewComment({
+          existingCommentId: generation.githubCommentId ?? input.preparingCommentId,
+          github: input.github,
+          snapshot,
+          state: "preparing",
+        });
+      },
+      requestedByUserId: null,
+      snapshotId: input.snapshot.id,
+    });
+
+    logCodewalkEvent("codewalk.github_webhook.generation_completed", {
+      generationId: result.generation.id,
+      guideId: result.generation.guideId,
+      owner: input.snapshot.owner,
+      pullRequestNumber: input.snapshot.number,
+      repo: input.snapshot.repo,
+      snapshotId: input.snapshot.id,
+      status: result.generation.status,
+    });
+  } catch (error) {
+    if (error instanceof CodeReviewGuideGenerationError) {
+      logCodewalkWarning("codewalk.github_webhook.generation_failed", {
+        code: error.code,
+        message: error.message,
+        owner: input.snapshot.owner,
+        pullRequestNumber: input.snapshot.number,
+        repo: input.snapshot.repo,
+        snapshotId: input.snapshot.id,
+      });
+      return;
+    }
+
+    logCodewalkError("codewalk.github_webhook.generation_unexpected_failed", {
+      error,
+      owner: input.snapshot.owner,
+      pullRequestNumber: input.snapshot.number,
+      repo: input.snapshot.repo,
+      snapshotId: input.snapshot.id,
+    });
   }
 }
 
@@ -152,6 +230,7 @@ async function postReviewComment(input: {
   error?: string | null;
   existingCommentId: string | null;
   github: ReturnType<typeof createServerGitHubRestClient>;
+  persistGenerationComment?: boolean;
   snapshot: {
     id: string;
     number: number;
@@ -179,9 +258,21 @@ async function postReviewComment(input: {
     },
   });
 
-  await updateCodeReviewGuideGenerationComment({
-    githubCommentId: String(comment.id),
-    githubCommentUrl: comment.htmlUrl,
+  if (input.persistGenerationComment ?? true) {
+    await updateCodeReviewGuideGenerationComment({
+      githubCommentId: String(comment.id),
+      githubCommentUrl: comment.htmlUrl,
+      snapshotId: input.snapshot.id,
+    });
+  }
+  logCodewalkEvent("codewalk.github_webhook.comment_upserted", {
+    commentId: comment.id,
+    owner: input.snapshot.owner,
+    pullRequestNumber: input.snapshot.number,
+    repo: input.snapshot.repo,
     snapshotId: input.snapshot.id,
+    state: input.state,
   });
+
+  return comment;
 }

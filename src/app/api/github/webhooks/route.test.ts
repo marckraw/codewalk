@@ -4,6 +4,19 @@ import { POST } from "./route";
 
 vi.mock("server-only", () => ({}));
 
+const afterTasks = vi.hoisted(() => [] as Array<() => unknown>);
+
+vi.mock("next/server", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("next/server")>();
+
+  return {
+    ...actual,
+    after: vi.fn((task: () => unknown) => {
+      afterTasks.push(task);
+    }),
+  };
+});
+
 vi.mock("@/lib/github/webhook", () => ({
   getGitHubWebhookConfig: vi.fn(),
   resolveGitHubPullRequestWebhook: vi.fn(),
@@ -45,6 +58,7 @@ import {
 
 describe("POST /api/github/webhooks", () => {
   beforeEach(() => {
+    afterTasks.length = 0;
     vi.clearAllMocks();
     vi.mocked(getGitHubWebhookConfig).mockReturnValue({
       allowedOwner: "ef-global",
@@ -92,24 +106,23 @@ describe("POST /api/github/webhooks", () => {
       });
 
       return {
-      generation: {
-        guideId: "guide-id",
-        id: "generation-id",
-        status: "ready",
-      },
+        generation: {
+          guideId: "guide-id",
+          id: "generation-id",
+          status: "ready",
+        },
       } as never;
     });
   });
 
-  it("imports the PR snapshot and triggers guide generation for valid PR webhooks", async () => {
+  it("imports the PR snapshot and queues guide generation for valid PR webhooks", async () => {
     const response = await POST(githubWebhookRequest({ action: "opened" }));
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({
-      generation: {
-        guideId: "guide-id",
-        id: "generation-id",
-        status: "ready",
+      comment: {
+        id: 1,
+        url: "https://github.com/ef-global/example/pull/42#issuecomment-1",
       },
       snapshot: {
         headSha: "head-sha",
@@ -118,13 +131,18 @@ describe("POST /api/github/webhooks", () => {
         owner: "ef-global",
         repo: "example",
       },
-      status: "generated",
+      status: "queued",
     });
     expect(createServerGitHubRestClient).toHaveBeenCalledWith("gh-token");
     expect(persistPullRequestSnapshot).toHaveBeenCalledWith({
       importedByUserId: null,
       snapshot: fixtureSnapshot,
     });
+    expect(generateAndPersistCodeReviewGuide).not.toHaveBeenCalled();
+    expect(afterTasks).toHaveLength(1);
+
+    await runAfterTasks();
+
     expect(generateAndPersistCodeReviewGuide).toHaveBeenCalledWith({
       onFailed: expect.any(Function),
       onReady: expect.any(Function),
@@ -169,19 +187,44 @@ describe("POST /api/github/webhooks", () => {
   });
 
   it("acknowledges generation failures after persisting the snapshot", async () => {
-    vi.mocked(generateAndPersistCodeReviewGuide).mockRejectedValue(
-      new CodeReviewGuideGenerationError("daemon", "Could not reach agents-daemon.", 503),
-    );
+    vi.mocked(generateAndPersistCodeReviewGuide).mockImplementationOnce(async (input) => {
+      await input.onStarted?.({
+        generation: { githubCommentId: null } as never,
+        snapshot: { id: "snapshot-id", number: 42, owner: "ef-global", repo: "example" } as never,
+      });
+      await input.onFailed?.({
+        error: "Could not reach agents-daemon.",
+        generation: { githubCommentId: "1" } as never,
+        snapshot: { id: "snapshot-id", number: 42, owner: "ef-global", repo: "example" } as never,
+      });
+      throw new CodeReviewGuideGenerationError("daemon", "Could not reach agents-daemon.", 503);
+    });
 
     const response = await POST(githubWebhookRequest({ action: "opened" }));
 
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toMatchObject({
-      code: "daemon",
-      status: "generation_failed",
+      status: "queued",
     });
+    await runAfterTasks();
+
+    const github = vi.mocked(createServerGitHubRestClient).mock.results[0]?.value;
+    expect(github.updateIssueComment).toHaveBeenCalledWith(
+      { number: 42, owner: "ef-global", repo: "example" },
+      "1",
+      expect.stringContaining("guided review failed"),
+    );
   });
 });
+
+async function runAfterTasks() {
+  const tasks = [...afterTasks];
+  afterTasks.length = 0;
+
+  for (const task of tasks) {
+    await task();
+  }
+}
 
 function githubWebhookRequest(payload: unknown) {
   return new Request("http://localhost/api/github/webhooks", {

@@ -1,6 +1,10 @@
 import "server-only";
 
-import { getAgentsDaemonConfig, type AgentsDaemonConfigResult } from "./config";
+import {
+  DEFAULT_AGENTS_DAEMON_REQUEST_TIMEOUT_MS,
+  getAgentsDaemonConfig,
+  type AgentsDaemonConfigResult,
+} from "./config";
 import {
   buildAgentsDaemonGenerateGuideRequestBody,
   buildAgentsDaemonUrl,
@@ -19,6 +23,7 @@ export type AgentsDaemonClientOptions = {
   apiToken: string;
   baseUrl: string;
   fetch?: FetchLike;
+  requestTimeoutMs?: number;
 };
 
 export type AgentsDaemonClientErrorCode = "daemon-error" | "invalid-response" | "network-error";
@@ -58,9 +63,11 @@ export type AgentsDaemonConnectionResult = {
 
 export class AgentsDaemonClient {
   private readonly fetchImpl: FetchLike;
+  private readonly requestTimeoutMs: number;
 
   constructor(private readonly options: AgentsDaemonClientOptions) {
     this.fetchImpl = options.fetch ?? fetch;
+    this.requestTimeoutMs = options.requestTimeoutMs ?? DEFAULT_AGENTS_DAEMON_REQUEST_TIMEOUT_MS;
   }
 
   async getHealth(): Promise<AgentsDaemonHealth> {
@@ -98,14 +105,23 @@ export class AgentsDaemonClient {
 
     let response: Response;
 
+    const timeout = createRequestTimeout(this.requestTimeoutMs);
+
     try {
       response = await this.fetchImpl(buildAgentsDaemonUrl(this.options.baseUrl, path), {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
         headers,
         method: options.method ?? "GET",
+        signal: timeout.signal,
       });
     } catch (error) {
-      throw new AgentsDaemonClientError("network-error", "Could not reach agents-daemon.", { cause: error });
+      const message = isAbortError(error)
+        ? `agents-daemon request timed out after ${this.requestTimeoutMs}ms.`
+        : "Could not reach agents-daemon.";
+
+      throw new AgentsDaemonClientError("network-error", message, { cause: error });
+    } finally {
+      timeout.clear();
     }
 
     const payload = await readJsonResponse(response);
@@ -125,6 +141,20 @@ export class AgentsDaemonClient {
       });
     }
   }
+}
+
+function createRequestTimeout(timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`Request timed out after ${timeoutMs}ms.`)), timeoutMs);
+
+  return {
+    clear: () => clearTimeout(timer),
+    signal: controller.signal,
+  };
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && (error.name === "AbortError" || error.message.includes("timed out"));
 }
 
 export function createAgentsDaemonClient(config = getAgentsDaemonConfig()): AgentsDaemonClient {

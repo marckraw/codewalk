@@ -1,7 +1,10 @@
 import "server-only";
 
 import type { CodeReviewGuideProvider } from "@/lib/db/schema";
+import { resolvePositiveIntegerEnv } from "@/lib/server-env";
 import { resolveAgentsDaemonBaseUrl } from "./protocol";
+
+export const DEFAULT_AGENTS_DAEMON_REQUEST_TIMEOUT_MS = 240_000;
 
 export type AgentsDaemonConfig = {
   apiToken: string;
@@ -9,6 +12,7 @@ export type AgentsDaemonConfig = {
   defaultEffort: string | null;
   defaultModel: string;
   defaultProvider: CodeReviewGuideProvider;
+  requestTimeoutMs: number;
 };
 
 export type AgentsDaemonConfigResult =
@@ -92,9 +96,14 @@ export function getAgentsDaemonConfig(env: Record<string, string | undefined> = 
       defaultEffort: env.DEFAULT_GUIDE_EFFORT?.trim() || null,
       defaultModel,
       defaultProvider,
+      requestTimeoutMs: getAgentsDaemonRequestTimeoutMs(env),
     },
     ok: true,
   };
+}
+
+export function getAgentsDaemonRequestTimeoutMs(env: Record<string, string | undefined> = process.env) {
+  return resolvePositiveIntegerEnv(env, "AGENTS_DAEMON_REQUEST_TIMEOUT_MS", DEFAULT_AGENTS_DAEMON_REQUEST_TIMEOUT_MS);
 }
 
 function isCodeReviewGuideProvider(value: string): value is CodeReviewGuideProvider {

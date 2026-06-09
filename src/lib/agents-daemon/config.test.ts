@@ -20,6 +20,39 @@ describe("getAgentsDaemonConfig", () => {
         defaultEffort: "high",
         defaultModel: "gpt-5.4",
         defaultProvider: "codex",
+        requestTimeoutMs: 240000,
+      },
+      ok: true,
+    });
+  });
+
+  it("resolves an optional request timeout", () => {
+    expect(
+      getAgentsDaemonConfig({
+        AGENTS_DAEMON_API_TOKEN: "token",
+        AGENTS_DAEMON_BASE_URL: "https://daemon.example.com",
+        AGENTS_DAEMON_REQUEST_TIMEOUT_MS: "60000",
+        DEFAULT_GUIDE_MODEL: "gpt-5.4",
+        DEFAULT_GUIDE_PROVIDER: "codex",
+      }),
+    ).toMatchObject({
+      config: {
+        requestTimeoutMs: 60000,
+      },
+      ok: true,
+    });
+
+    expect(
+      getAgentsDaemonConfig({
+        AGENTS_DAEMON_API_TOKEN: "token",
+        AGENTS_DAEMON_BASE_URL: "https://daemon.example.com",
+        AGENTS_DAEMON_REQUEST_TIMEOUT_MS: "not-a-number",
+        DEFAULT_GUIDE_MODEL: "gpt-5.4",
+        DEFAULT_GUIDE_PROVIDER: "codex",
+      }),
+    ).toMatchObject({
+      config: {
+        requestTimeoutMs: 240000,
       },
       ok: true,
     });

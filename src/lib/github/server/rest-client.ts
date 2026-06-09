@@ -8,7 +8,8 @@ import type {
   NormalizedPullRequestSnapshot,
 } from "@/lib/github/domain";
 import type { GitHubPullRequestRef } from "@/lib/github/pull-request-url";
-import { mapGitHubErrorResponse, missingGitHubAuthError } from "./errors";
+import { getGitHubRequestTimeoutMs } from "./config";
+import { GitHubClientError, mapGitHubErrorResponse, missingGitHubAuthError } from "./errors";
 import {
   type GitHubIssueCommentResponse,
   type GitHubPullRequestCommitResponse,
@@ -31,6 +32,7 @@ export type GitHubRestClientOptions = {
   apiVersion?: string;
   baseUrl?: string;
   fetcher?: Fetcher;
+  timeoutMs?: number;
   token?: string | null;
 };
 
@@ -49,12 +51,14 @@ export class GitHubRestClient {
   private readonly apiVersion: string;
   private readonly baseUrl: string;
   private readonly fetcher: Fetcher;
+  private readonly timeoutMs: number;
   private readonly token: string | null;
 
   constructor(options: GitHubRestClientOptions = {}) {
     this.apiVersion = options.apiVersion ?? defaultApiVersion;
     this.baseUrl = options.baseUrl ?? defaultBaseUrl;
     this.fetcher = options.fetcher ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? getGitHubRequestTimeoutMs();
     this.token = options.token ?? null;
   }
 
@@ -175,14 +179,41 @@ export class GitHubRestClient {
       headers["Content-Type"] = "application/json";
     }
 
-    return this.fetcher(toGitHubUrl(path, this.baseUrl), {
-      body: init.body === undefined ? undefined : JSON.stringify(init.body),
-      headers: {
-        ...headers,
-      },
-      method: init.method,
-    });
+    const timeout = createRequestTimeout(this.timeoutMs);
+
+    try {
+      return await this.fetcher(toGitHubUrl(path, this.baseUrl), {
+        body: init.body === undefined ? undefined : JSON.stringify(init.body),
+        headers: {
+          ...headers,
+        },
+        method: init.method,
+        signal: timeout.signal,
+      });
+    } catch (error) {
+      if (isAbortError(error)) {
+        throw new GitHubClientError("github_error", `GitHub request timed out after ${this.timeoutMs}ms.`);
+      }
+
+      throw error;
+    } finally {
+      timeout.clear();
+    }
   }
+}
+
+function createRequestTimeout(timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error(`Request timed out after ${timeoutMs}ms.`)), timeoutMs);
+
+  return {
+    clear: () => clearTimeout(timer),
+    signal: controller.signal,
+  };
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof Error && (error.name === "AbortError" || error.message.includes("timed out"));
 }
 
 export function pullRequestPath(ref: GitHubPullRequestRef) {

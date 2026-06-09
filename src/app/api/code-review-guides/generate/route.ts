@@ -7,6 +7,9 @@ import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
 import { authorizeReviewSnapshotAccess } from "@/lib/review-authorization";
 
+export const maxDuration = 300;
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   let body: unknown;
 

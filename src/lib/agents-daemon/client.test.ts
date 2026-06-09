@@ -87,6 +87,22 @@ describe("AgentsDaemonClient", () => {
     });
   });
 
+  it("maps aborted requests to timeout diagnostics", async () => {
+    const timeoutError = new Error("The operation was aborted.");
+    timeoutError.name = "AbortError";
+    const client = new AgentsDaemonClient({
+      apiToken: "secret-token",
+      baseUrl: "https://daemon.example.com",
+      fetch: vi.fn().mockRejectedValue(timeoutError),
+      requestTimeoutMs: 10,
+    });
+
+    await expect(client.getHealth()).rejects.toMatchObject({
+      code: "network-error",
+      message: "agents-daemon request timed out after 10ms.",
+    });
+  });
+
   it("maps connection diagnostics states", async () => {
     await expect(
       checkAgentsDaemonConnection({
@@ -111,6 +127,7 @@ describe("AgentsDaemonClient", () => {
             defaultEffort: null,
             defaultModel: "gpt-5.4",
             defaultProvider: "codex",
+            requestTimeoutMs: 240000,
           },
           ok: true,
         },

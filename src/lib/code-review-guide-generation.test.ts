@@ -62,6 +62,7 @@ describe("generateAndPersistCodeReviewGuide", () => {
         defaultEffort: "high",
         defaultModel: "gpt-5.4",
         defaultProvider: "codex",
+        requestTimeoutMs: 240000,
       },
       ok: true,
     });
