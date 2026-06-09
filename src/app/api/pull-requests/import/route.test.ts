@@ -142,6 +142,26 @@ describe("POST /api/pull-requests/import", () => {
     });
     expect(createServerGitHubRestClient).not.toHaveBeenCalled();
   });
+
+  it("returns JSON when persistence fails unexpectedly", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(persistPullRequestSnapshot).mockRejectedValue(new Error("insert failed"));
+
+    const response = await POST(jsonRequest({ url: "https://github.com/openai/codex/pull/24" }));
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      code: "import_failed",
+      error: "Pull request import failed unexpectedly. Check Vercel function logs for [codewalk-import-failed].",
+    });
+    expect(console.error).toHaveBeenCalledWith(
+      "[codewalk-import-failed]",
+      expect.objectContaining({
+        error: "insert failed",
+        pullRequest: { number: 24, owner: "openai", repo: "codex" },
+      }),
+    );
+  });
 });
 
 function jsonRequest(body: unknown) {

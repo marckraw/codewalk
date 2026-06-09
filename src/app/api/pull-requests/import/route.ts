@@ -95,7 +95,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: error.message }, { status: 503 });
     }
 
-    throw error;
+    console.error("[codewalk-import-failed]", {
+      error: error instanceof Error ? error.message : String(error),
+      pullRequest: parsed.pullRequest,
+    });
+
+    return NextResponse.json(
+      {
+        code: "import_failed",
+        error: "Pull request import failed unexpectedly. Check Vercel function logs for [codewalk-import-failed].",
+      },
+      { status: 500 },
+    );
   }
 }
 
