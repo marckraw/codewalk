@@ -15,6 +15,8 @@ export type PersistPullRequestSnapshotInput = {
   snapshot: NormalizedPullRequestSnapshot;
 };
 
+export type PullRequestSnapshotRow = typeof pullRequestSnapshots.$inferSelect;
+
 export function buildPullRequestSnapshotRows(input: PersistPullRequestSnapshotInput) {
   const { importedByUserId, snapshot } = input;
   const { pullRequest } = snapshot;
@@ -121,4 +123,11 @@ export async function persistPullRequestSnapshot(input: PersistPullRequestSnapsh
 
     return snapshot;
   });
+}
+
+export async function getPullRequestSnapshotById(snapshotId: string): Promise<PullRequestSnapshotRow | null> {
+  const db = getDb();
+  const [snapshot] = await db.select().from(pullRequestSnapshots).where(eq(pullRequestSnapshots.id, snapshotId)).limit(1);
+
+  return snapshot ?? null;
 }

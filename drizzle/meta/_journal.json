@@ -15,6 +15,13 @@
       "when": 1780993484315,
       "tag": "0001_sour_the_anarchist",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1780994730596,
+      "tag": "0002_real_iron_lad",
+      "breakpoints": true
     }
   ]
 }

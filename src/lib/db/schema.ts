@@ -28,6 +28,12 @@ export const codeReviewGuideStatus = pgEnum("code_review_guide_status", ["ready"
 
 export const codeReviewGuideGenerator = pgEnum("code_review_guide_generator", ["deterministic", "agent"]);
 
+export const codeReviewGuideGenerationStatus = pgEnum("code_review_guide_generation_status", [
+  "running",
+  "ready",
+  "failed",
+]);
+
 export const guideRiskLevel = pgEnum("guide_risk_level", ["low", "medium", "high"]);
 
 export const noteAnchorType = pgEnum("note_anchor_type", ["guide_section", "file", "diff_range"]);
@@ -215,6 +221,32 @@ export const guideSectionFiles = pgTable(
   }),
 );
 
+export const codeReviewGuideGenerations = pgTable(
+  "code_review_guide_generations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    snapshotId: uuid("snapshot_id")
+      .notNull()
+      .references(() => pullRequestSnapshots.id, { onDelete: "cascade" }),
+    requestedByUserId: uuid("requested_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    guideId: uuid("guide_id").references(() => guides.id, { onDelete: "set null" }),
+    provider: codeReviewGuideProvider("provider"),
+    model: varchar("model", { length: 191 }),
+    effort: varchar("effort", { length: 191 }),
+    force: boolean("force").default(false).notNull(),
+    status: codeReviewGuideGenerationStatus("status").notNull(),
+    error: text("error"),
+    startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    snapshotIdx: uniqueIndex("code_review_guide_generations_snapshot_idx").on(table.snapshotId),
+    statusIdx: index("code_review_guide_generations_status_idx").on(table.status, table.updatedAt),
+  }),
+);
+
 export const reviewNotes = pgTable(
   "review_notes",
   {
@@ -244,6 +276,7 @@ export type CodeReviewGuideMode = "pull-request";
 export type CodeReviewGuideProvider = "claude" | "codex" | "cursor" | "gemini";
 export type CodeReviewGuideStatus = "ready" | "failed";
 export type CodeReviewGuideGenerator = "deterministic" | "agent";
+export type CodeReviewGuideGenerationStatus = "running" | "ready" | "failed";
 export type CodeReviewGuideRiskLevel = "low" | "medium" | "high";
 
 export type CodeReviewCacheIdentity = {
@@ -280,6 +313,7 @@ export type CodeReviewGuidePullRequestMetadata = {
 export type CodeReviewGuideRow = typeof guides.$inferSelect;
 export type CodeReviewGuideSectionRow = typeof guideSections.$inferSelect;
 export type CodeReviewGuideSectionFileRow = typeof guideSectionFiles.$inferSelect;
+export type CodeReviewGuideGenerationRow = typeof codeReviewGuideGenerations.$inferSelect;
 
 export const reviewProgress = pgTable(
   "review_progress",

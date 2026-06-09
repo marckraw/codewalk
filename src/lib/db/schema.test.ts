@@ -1,6 +1,7 @@
 import { getTableName } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  codeReviewGuideGenerations,
   guideSections,
   guideSectionFiles,
   guides,
@@ -21,6 +22,7 @@ describe("database schema", () => {
     expect(getTableName(pullRequestCommits)).toBe("pull_request_commits");
     expect(getTableName(pullRequestComments)).toBe("pull_request_comments");
     expect(getTableName(guides)).toBe("guides");
+    expect(getTableName(codeReviewGuideGenerations)).toBe("code_review_guide_generations");
     expect(getTableName(guideSections)).toBe("guide_sections");
     expect(getTableName(guideSectionFiles)).toBe("guide_section_files");
     expect(getTableName(reviewNotes)).toBe("review_notes");
@@ -52,5 +54,13 @@ describe("database schema", () => {
     expect(guideSections.riskRationale.name).toBe("risk_rationale");
     expect(guideSectionFiles.guideSectionId.name).toBe("guide_section_id");
     expect(guideSectionFiles.hunkHints.name).toBe("hunk_hints");
+  });
+
+  it("tracks guide generation status separately from daemon guide data", () => {
+    expect(codeReviewGuideGenerations.snapshotId.name).toBe("snapshot_id");
+    expect(codeReviewGuideGenerations.requestedByUserId.name).toBe("requested_by_user_id");
+    expect(codeReviewGuideGenerations.guideId.name).toBe("guide_id");
+    expect(codeReviewGuideGenerations.status.name).toBe("status");
+    expect(codeReviewGuideGenerations.error.name).toBe("error");
   });
 });
