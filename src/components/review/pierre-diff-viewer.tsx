@@ -9,6 +9,7 @@ import {
 } from "@pierre/diffs";
 import { PatchDiff, Virtualizer, WorkerPoolContextProvider } from "@pierre/diffs/react";
 import { Loader2 } from "lucide-react";
+import { useAppColorScheme } from "./use-app-color-scheme";
 import { PierreDiffErrorBoundary } from "./pierre-diff-error-boundary";
 import { planPierreDiffPerformance } from "./pierre-diff-performance.pure";
 import { describeMissingPierrePatch } from "./pierre-diff-viewer.pure";
@@ -38,6 +39,8 @@ export function PierreDiffViewer<TAnnotation>({
   selectedLines = null,
   title = "Pull request diff",
 }: PierreDiffViewerProps<TAnnotation>) {
+  const colorScheme = useAppColorScheme();
+  const pierreTheme = colorScheme === "dark" ? "pierre-dark" : "pierre-light";
   const performancePlan = useMemo(() => planPierreDiffPerformance(diff), [diff]);
   const patch = useMemo(() => (file ? buildPierrePatch({ diff, file }) : null), [diff, file]);
   const canUseWorkerPool = performancePlan.useWorkerPool && canUsePierreDiffWorkerPool();
@@ -88,6 +91,9 @@ export function PierreDiffViewer<TAnnotation>({
         lineHoverHighlight: onSelectedLinesChange ? "line" : "disabled",
         onLineSelected: onSelectedLinesChange,
         onLineSelectionEnd: onSelectedLinesChange,
+        // Single theme name (not the light/dark pair) so Pierre emits direct
+        // colors and follows the app theme instead of the OS `prefers-color-scheme`.
+        theme: pierreTheme,
       }}
       patch={patch}
       renderAnnotation={renderAnnotation}
