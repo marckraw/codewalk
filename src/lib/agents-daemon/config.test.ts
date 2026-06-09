@@ -9,11 +9,17 @@ describe("getAgentsDaemonConfig", () => {
       getAgentsDaemonConfig({
         AGENTS_DAEMON_API_TOKEN: " token ",
         AGENTS_DAEMON_BASE_URL: "https://daemon.example.com/",
+        DEFAULT_GUIDE_EFFORT: " high ",
+        DEFAULT_GUIDE_MODEL: " gpt-5.4 ",
+        DEFAULT_GUIDE_PROVIDER: "codex",
       }),
     ).toEqual({
       config: {
         apiToken: "token",
         baseUrl: "https://daemon.example.com",
+        defaultEffort: "high",
+        defaultModel: "gpt-5.4",
+        defaultProvider: "codex",
       },
       ok: true,
     });
@@ -42,6 +48,37 @@ describe("getAgentsDaemonConfig", () => {
       missingKeys: ["AGENTS_DAEMON_API_TOKEN"],
       ok: false,
       state: "missing-token",
+    });
+    expect(
+      getAgentsDaemonConfig({
+        AGENTS_DAEMON_API_TOKEN: "token",
+        AGENTS_DAEMON_BASE_URL: "https://daemon.example.com",
+      }),
+    ).toMatchObject({
+      missingKeys: ["DEFAULT_GUIDE_PROVIDER"],
+      ok: false,
+      state: "missing-default-provider",
+    });
+    expect(
+      getAgentsDaemonConfig({
+        AGENTS_DAEMON_API_TOKEN: "token",
+        AGENTS_DAEMON_BASE_URL: "https://daemon.example.com",
+        DEFAULT_GUIDE_PROVIDER: "openai",
+      }),
+    ).toMatchObject({
+      ok: false,
+      state: "invalid-default-provider",
+    });
+    expect(
+      getAgentsDaemonConfig({
+        AGENTS_DAEMON_API_TOKEN: "token",
+        AGENTS_DAEMON_BASE_URL: "https://daemon.example.com",
+        DEFAULT_GUIDE_PROVIDER: "codex",
+      }),
+    ).toMatchObject({
+      missingKeys: ["DEFAULT_GUIDE_MODEL"],
+      ok: false,
+      state: "missing-default-model",
     });
   });
 });

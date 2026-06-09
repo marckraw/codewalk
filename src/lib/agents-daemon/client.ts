@@ -36,8 +36,11 @@ export class AgentsDaemonClientError extends Error {
 
 export type AgentsDaemonConnectionState =
   | "connected"
-  | "missing-base-url"
   | "invalid-base-url"
+  | "invalid-default-provider"
+  | "missing-base-url"
+  | "missing-default-model"
+  | "missing-default-provider"
   | "missing-token"
   | "auth-failed"
   | "unreachable"

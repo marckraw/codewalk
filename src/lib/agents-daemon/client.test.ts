@@ -108,6 +108,9 @@ describe("AgentsDaemonClient", () => {
           config: {
             apiToken: "bad-token",
             baseUrl: "https://daemon.example.com",
+            defaultEffort: null,
+            defaultModel: "gpt-5.4",
+            defaultProvider: "codex",
           },
           ok: true,
         },
