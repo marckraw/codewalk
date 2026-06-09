@@ -10,28 +10,47 @@ import { GuideView } from "./guide-view";
 import { ModeButton } from "./mode-button";
 import { PierreDiffViewer } from "./pierre-diff-viewer";
 import type { ReviewFile, ReviewMode, ReviewWorkspace as ReviewWorkspaceModel } from "./review-types";
+import type { ReviewDeepLink } from "./review-deep-link.pure";
+import { buildReviewDeepLinkQuery } from "./review-deep-link.pure";
 import { useReviewWorkspaceLive } from "./use-review-workspace-live";
 
 interface ReviewWorkspaceProps {
   autoGenerate: boolean;
+  deepLink?: ReviewDeepLink;
   workspace: ReviewWorkspaceModel;
 }
 
-export function ReviewWorkspace({ autoGenerate, workspace: initialWorkspace }: ReviewWorkspaceProps) {
+const EMPTY_DEEP_LINK: ReviewDeepLink = { filePath: null, sectionId: null, view: null };
+
+export function ReviewWorkspace({ autoGenerate, deepLink = EMPTY_DEEP_LINK, workspace: initialWorkspace }: ReviewWorkspaceProps) {
   const { markGenerationStarted, workspace } = useReviewWorkspaceLive(initialWorkspace, { autoGenerate });
   const [selectedView, setSelectedView] = useState<ReviewMode>(
-    initialWorkspace.guide ||
+    deepLink.view ??
+      (initialWorkspace.guide ||
       autoGenerate ||
       initialWorkspace.state === "preparing" ||
       initialWorkspace.state === "failed"
-      ? "guide"
-      : "diff",
+        ? "guide"
+        : "diff"),
   );
-  const [selectedFile, setSelectedFile] = useState<string | null>(workspace.files[0]?.path ?? null);
+  const [selectedFile, setSelectedFile] = useState<string | null>(() => {
+    if (deepLink.filePath && initialWorkspace.files.some((file) => file.path === deepLink.filePath)) {
+      return deepLink.filePath;
+    }
+
+    return initialWorkspace.files[0]?.path ?? null;
+  });
   const [statusFilter, setStatusFilter] = useState("all");
-  const [activeGuideSectionId, setActiveGuideSectionId] = useState<string | null>(workspace.guide?.sections[0]?.id ?? null);
+  const [activeGuideSectionId, setActiveGuideSectionId] = useState<string | null>(() => {
+    if (deepLink.sectionId && initialWorkspace.guide?.sections.some((section) => section.id === deepLink.sectionId)) {
+      return deepLink.sectionId;
+    }
+
+    return initialWorkspace.guide?.sections[0]?.id ?? null;
+  });
   const guideSectionRefs = useRef(new Map<string, HTMLElement>());
   const guideFileRefs = useRef(new Map<string, HTMLElement>());
+  const hasAppliedInitialDeepLink = useRef(false);
 
   const statusCounts = useMemo(() => countFilesByStatus(workspace.files), [workspace.files]);
   const visibleFiles = useMemo(
@@ -97,6 +116,40 @@ export function ReviewWorkspace({ autoGenerate, workspace: initialWorkspace }: R
 
     return () => observer.disconnect();
   }, [selectedView, workspace.guide]);
+
+  // Scroll to the deep-linked section/file once the guide is rendered.
+  useEffect(() => {
+    if (hasAppliedInitialDeepLink.current || selectedView !== "guide" || !workspace.guide) {
+      return;
+    }
+
+    const sectionNode = deepLink.sectionId ? guideSectionRefs.current.get(deepLink.sectionId) : undefined;
+    const fileNode = deepLink.filePath ? guideFileRefs.current.get(deepLink.filePath) : undefined;
+    const target = sectionNode ?? fileNode;
+
+    if (target) {
+      hasAppliedInitialDeepLink.current = true;
+      target.scrollIntoView({ block: "start", inline: "nearest" });
+    }
+  }, [deepLink.filePath, deepLink.sectionId, selectedView, workspace.guide]);
+
+  // Reflect the current selection in the URL so the view is shareable, without
+  // adding history entries (replaceState) or triggering a server navigation.
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const query = buildReviewDeepLinkQuery({
+      filePath: selectedFile,
+      sectionId: effectiveActiveGuideSectionId,
+      view: selectedView,
+    });
+
+    if (query !== window.location.search) {
+      window.history.replaceState(window.history.state, "", `${window.location.pathname}${query}`);
+    }
+  }, [effectiveActiveGuideSectionId, selectedFile, selectedView]);
 
   const handleSelectFile = useCallback((filePath: string) => {
     setSelectedFile(filePath);
