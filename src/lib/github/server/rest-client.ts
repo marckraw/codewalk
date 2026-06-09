@@ -40,6 +40,11 @@ export type GitHubIssueComment = {
   id: number;
 };
 
+type GitHubRepositoryResponse = {
+  full_name?: string;
+  id?: number;
+};
+
 export class GitHubRestClient {
   private readonly apiVersion: string;
   private readonly baseUrl: string;
@@ -56,6 +61,10 @@ export class GitHubRestClient {
   async getPullRequest(ref: GitHubPullRequestRef): Promise<NormalizedPullRequest> {
     const pullRequest = await this.request<GitHubPullRequestResponse>(pullRequestPath(ref));
     return normalizePullRequestResponse(ref, pullRequest);
+  }
+
+  async getRepository(ref: Pick<GitHubPullRequestRef, "owner" | "repo">): Promise<GitHubRepositoryResponse> {
+    return this.request<GitHubRepositoryResponse>(repositoryPath(ref));
   }
 
   async listPullRequestFiles(ref: GitHubPullRequestRef): Promise<NormalizedPullRequestFile[]> {
@@ -178,6 +187,10 @@ export class GitHubRestClient {
 
 export function pullRequestPath(ref: GitHubPullRequestRef) {
   return `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}/pulls/${ref.number}`;
+}
+
+function repositoryPath(ref: Pick<GitHubPullRequestRef, "owner" | "repo">) {
+  return `/repos/${encodeURIComponent(ref.owner)}/${encodeURIComponent(ref.repo)}`;
 }
 
 function issueCommentsPath(ref: GitHubPullRequestRef) {

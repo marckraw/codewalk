@@ -37,6 +37,23 @@ describe("GitHubRestClient", () => {
     ]);
   });
 
+  it("checks repository access from the server-side REST endpoint", async () => {
+    const { client, requests } = createClient([
+      jsonResponse({ full_name: "openai/codex", id: 123 }),
+    ]);
+
+    await expect(client.getRepository({ owner: "openai", repo: "codex" })).resolves.toEqual({
+      full_name: "openai/codex",
+      id: 123,
+    });
+    expect(requests).toMatchObject([
+      {
+        url: "https://api.github.com/repos/openai/codex",
+      },
+    ]);
+  });
+
+
   it("fetches changed files, patches, commits, and both comment feeds", async () => {
     const { client, requests } = createClient([
       jsonResponse([
