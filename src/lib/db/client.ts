@@ -1,7 +1,6 @@
 import "server-only";
 
-import { neon } from "@neondatabase/serverless";
-import { drizzle } from "drizzle-orm/neon-http";
+import { drizzle } from "drizzle-orm/neon-serverless";
 import * as schema from "./schema";
 
 type DatabaseClient = ReturnType<typeof createDatabaseClient>;
@@ -17,8 +16,7 @@ function getDatabaseUrl() {
 }
 
 function createDatabaseClient() {
-  const sql = neon(getDatabaseUrl());
-  return drizzle(sql, { schema });
+  return drizzle(getDatabaseUrl(), { schema });
 }
 
 export function getDb() {
