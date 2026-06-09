@@ -31,6 +31,12 @@ describe("Codewalk review comments", () => {
     );
   });
 
+  it("links the comment to the guide view when a view is requested", () => {
+    expect(
+      buildCodewalkReviewUrl({ appBaseUrl: "https://codewalk.example.com", snapshotId: "snapshot-id", view: "guide" }),
+    ).toBe("https://codewalk.example.com/review/snapshot-id?view=guide");
+  });
+
   it("updates a stored comment id when available", async () => {
     const github = {
       createIssueComment: vi.fn(),

@@ -53,6 +53,24 @@ export function getGitHubWebhookConfig(env: Record<string, string | undefined> =
   };
 }
 
+/**
+ * Resolve the JSON payload text from a webhook request body, supporting both of
+ * GitHub's content types: `application/json` (body is the JSON) and
+ * `application/x-www-form-urlencoded` (JSON lives in the `payload` field).
+ * Returns null when no payload is present. The signature must be verified
+ * against the raw body separately, before calling this.
+ */
+export function extractGitHubWebhookJson(input: { body: string; contentType: string | null }): string | null {
+  const contentType = input.contentType?.toLowerCase() ?? "";
+
+  if (contentType.includes("application/x-www-form-urlencoded")) {
+    const payload = new URLSearchParams(input.body).get("payload");
+    return payload && payload.trim() ? payload : null;
+  }
+
+  return input.body.trim() ? input.body : null;
+}
+
 export function verifyGitHubWebhookSignature(input: {
   payload: string;
   secret: string;
