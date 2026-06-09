@@ -1,14 +1,11 @@
-import { AuthControls } from "@/components/auth/auth-controls";
 import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
 import { ReviewDashboard } from "@/components/review/review-dashboard";
-import { ThemeModeToggle } from "@/components/theme-mode-toggle";
+import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelHeader } from "@/components/ui/panel";
-import { Toolbar } from "@/components/ui/toolbar";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { listReviewWorkspaces } from "@/lib/db/review-workspace";
-import { APP_NAME } from "@/lib/product";
 
 export default async function Home() {
   const user = await getCurrentCodewalkUser();
@@ -17,23 +14,7 @@ export default async function Home() {
 
   return (
     <main className="min-h-screen">
-      <header>
-        <Toolbar>
-          <div className="flex items-center gap-3">
-            <div className="grid size-8 place-items-center rounded-md border border-[var(--border)] bg-[var(--panel-subtle)] text-sm font-semibold">
-              C
-            </div>
-            <div>
-              <h1 className="text-sm font-semibold">{APP_NAME}</h1>
-              <p className="text-xs text-[var(--muted)]">Guided pull request review</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <ThemeModeToggle />
-            <AuthControls />
-          </div>
-        </Toolbar>
-      </header>
+      <SiteHeader />
 
       <section className="px-4 py-4 sm:px-6">
         {user.status === "misconfigured" ? (
