@@ -10,14 +10,23 @@ import { GuideView } from "./guide-view";
 import { ModeButton } from "./mode-button";
 import { PierreDiffViewer } from "./pierre-diff-viewer";
 import type { ReviewFile, ReviewMode, ReviewWorkspace as ReviewWorkspaceModel } from "./review-types";
+import { useReviewWorkspaceLive } from "./use-review-workspace-live";
 
 interface ReviewWorkspaceProps {
   autoGenerate: boolean;
   workspace: ReviewWorkspaceModel;
 }
 
-export function ReviewWorkspace({ autoGenerate, workspace }: ReviewWorkspaceProps) {
-  const [selectedView, setSelectedView] = useState<ReviewMode>(workspace.guide ? "guide" : "diff");
+export function ReviewWorkspace({ autoGenerate, workspace: initialWorkspace }: ReviewWorkspaceProps) {
+  const { markGenerationStarted, workspace } = useReviewWorkspaceLive(initialWorkspace, { autoGenerate });
+  const [selectedView, setSelectedView] = useState<ReviewMode>(
+    initialWorkspace.guide ||
+      autoGenerate ||
+      initialWorkspace.state === "preparing" ||
+      initialWorkspace.state === "failed"
+      ? "guide"
+      : "diff",
+  );
   const [selectedFile, setSelectedFile] = useState<string | null>(workspace.files[0]?.path ?? null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [activeGuideSectionId, setActiveGuideSectionId] = useState<string | null>(workspace.guide?.sections[0]?.id ?? null);
@@ -180,6 +189,7 @@ export function ReviewWorkspace({ autoGenerate, workspace }: ReviewWorkspaceProp
             <GuideRail
               activeSectionId={effectiveActiveGuideSectionId}
               autoGenerate={autoGenerate}
+              onGenerationStart={markGenerationStarted}
               onSelectSection={handleSelectGuideSection}
               workspace={workspace}
             />
