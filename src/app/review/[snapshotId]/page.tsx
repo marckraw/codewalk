@@ -6,23 +6,29 @@ import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Toolbar } from "@/components/ui/toolbar";
+import { parseReviewDeepLink } from "@/components/review/review-deep-link.pure";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { getReviewWorkspace } from "@/lib/db/review-workspace";
 import { APP_NAME } from "@/lib/product";
+
+type ReviewSnapshotSearchParams = {
+  file?: string | string[];
+  generate?: string;
+  section?: string | string[];
+  view?: string | string[];
+};
 
 type ReviewSnapshotPageProps = {
   params: Promise<{
     snapshotId: string;
   }>;
-  searchParams?: Promise<{
-    generate?: string;
-  }>;
+  searchParams?: Promise<ReviewSnapshotSearchParams>;
 };
 
 export default async function ReviewSnapshotPage({ params, searchParams }: ReviewSnapshotPageProps) {
   const [{ snapshotId }, query, user] = await Promise.all([
     params,
-    searchParams ?? Promise.resolve({} as { generate?: string }),
+    searchParams ?? Promise.resolve({} as ReviewSnapshotSearchParams),
     getCurrentCodewalkUser(),
   ]);
 
@@ -72,7 +78,11 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
 
   return (
     <Shell>
-      <ReviewWorkspace autoGenerate={query.generate === "1"} workspace={workspace} />
+      <ReviewWorkspace
+        autoGenerate={query.generate === "1"}
+        deepLink={parseReviewDeepLink(query)}
+        workspace={workspace}
+      />
     </Shell>
   );
 }
