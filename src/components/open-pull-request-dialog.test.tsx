@@ -3,10 +3,19 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { OpenPullRequestDialog } from "./open-pull-request-dialog";
 
+const routerPush = vi.hoisted(() => vi.fn());
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({
+    push: routerPush,
+  }),
+}));
+
 describe("OpenPullRequestDialog", () => {
   afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    routerPush.mockClear();
   });
 
   it("opens a focused PR URL dialog from the header command", async () => {
@@ -55,5 +64,6 @@ describe("OpenPullRequestDialog", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(await screen.findByText("Imported openai/codex#24 with 4 files, 3 commits, and 2 comments.")).toBeInTheDocument();
+    expect(routerPush).toHaveBeenCalledWith("/review/snapshot-id?generate=1");
   });
 });

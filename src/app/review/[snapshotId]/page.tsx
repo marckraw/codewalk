@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 import { AuthControls } from "@/components/auth/auth-controls";
+import { CodeReviewGuideGenerationControl } from "@/components/code-review-guide-generation-control";
 import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Panel, PanelHeader } from "@/components/ui/panel";
@@ -15,10 +16,17 @@ type ReviewSnapshotPageProps = {
   params: Promise<{
     snapshotId: string;
   }>;
+  searchParams?: Promise<{
+    generate?: string;
+  }>;
 };
 
-export default async function ReviewSnapshotPage({ params }: ReviewSnapshotPageProps) {
-  const [{ snapshotId }, user] = await Promise.all([params, getCurrentCodewalkUser()]);
+export default async function ReviewSnapshotPage({ params, searchParams }: ReviewSnapshotPageProps) {
+  const [{ snapshotId }, query, user] = await Promise.all([
+    params,
+    searchParams ?? Promise.resolve({} as { generate?: string }),
+    getCurrentCodewalkUser(),
+  ]);
 
   if (user.status === "misconfigured") {
     return (
@@ -86,7 +94,7 @@ export default async function ReviewSnapshotPage({ params }: ReviewSnapshotPageP
 
   return (
     <Shell>
-      <ReviewWorkspace workspace={workspace} />
+      <ReviewWorkspace autoGenerate={query.generate === "1"} workspace={workspace} />
     </Shell>
   );
 }
@@ -114,7 +122,7 @@ function Shell({ children }: { children: ReactNode }) {
   );
 }
 
-function ReviewWorkspace({ workspace }: { workspace: ReviewWorkspaceData }) {
+function ReviewWorkspace({ autoGenerate, workspace }: { autoGenerate: boolean; workspace: ReviewWorkspaceData }) {
   const selectedFile = workspace.files[0] ?? null;
 
   return (
@@ -127,7 +135,7 @@ function ReviewWorkspace({ workspace }: { workspace: ReviewWorkspaceData }) {
         />
         <div className="grid gap-3 p-3">
           <SnapshotSummary workspace={workspace} />
-          <GuideRail workspace={workspace} />
+          <GuideRail autoGenerate={autoGenerate} workspace={workspace} />
         </div>
       </Panel>
 
@@ -175,10 +183,16 @@ function SnapshotSummary({ workspace }: { workspace: ReviewWorkspaceData }) {
   );
 }
 
-function GuideRail({ workspace }: { workspace: ReviewWorkspaceData }) {
+function GuideRail({ autoGenerate, workspace }: { autoGenerate: boolean; workspace: ReviewWorkspaceData }) {
   if (workspace.state === "imported") {
     return (
       <StatePanel
+        action={
+          <CodeReviewGuideGenerationControl
+            autoStart={autoGenerate}
+            snapshotId={workspace.snapshot.id}
+          />
+        }
         description="This PR snapshot is stored, but no guided review has been generated yet."
         icon={<Clock3 aria-hidden="true" className="size-4" />}
         title="Guide not generated"
@@ -199,6 +213,13 @@ function GuideRail({ workspace }: { workspace: ReviewWorkspaceData }) {
   if (workspace.state === "failed") {
     return (
       <StatePanel
+        action={
+          <CodeReviewGuideGenerationControl
+            force
+            label="Retry generation"
+            snapshotId={workspace.snapshot.id}
+          />
+        }
         description={workspace.generation?.error ?? workspace.guide?.error ?? "Guide generation failed."}
         icon={<AlertTriangle aria-hidden="true" className="size-4" />}
         title="Guide failed"
@@ -214,9 +235,15 @@ function GuideRail({ workspace }: { workspace: ReviewWorkspaceData }) {
   return (
     <div className="grid gap-3">
       <div className="rounded-md border border-[var(--border)] bg-[var(--panel-subtle)] p-3">
-        <div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase text-[var(--muted)]">
-          <ListChecks aria-hidden="true" className="size-3.5" />
-          Overview
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs font-semibold uppercase text-[var(--muted)]">
+            <ListChecks aria-hidden="true" className="size-3.5" />
+            Overview
+          </div>
+          <CodeReviewGuideGenerationControl
+            force
+            snapshotId={workspace.snapshot.id}
+          />
         </div>
         <p className="text-sm leading-6">{workspace.guide.overview}</p>
       </div>
@@ -250,9 +277,11 @@ function GuideRail({ workspace }: { workspace: ReviewWorkspaceData }) {
 function StatePanel({
   description,
   icon,
+  action,
   title,
   tone = "muted",
 }: {
+  action?: ReactNode;
   description: string;
   icon: ReactNode;
   title: string;
@@ -265,6 +294,7 @@ function StatePanel({
         {title}
       </div>
       <p className="text-xs leading-5 text-[var(--muted)]">{description}</p>
+      {action}
     </div>
   );
 }

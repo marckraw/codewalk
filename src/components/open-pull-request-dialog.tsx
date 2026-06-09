@@ -1,5 +1,6 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useId, useState } from "react";
 import type { FormEvent } from "react";
 import { GitPullRequestArrow, X } from "lucide-react";
@@ -26,6 +27,7 @@ export function OpenPullRequestDialog() {
   const [isOpen, setIsOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [importResult, setImportResult] = useState<PullRequestImportResponse | null>(null);
+  const router = useRouter();
   const titleId = useId();
   const descriptionId = useId();
 
@@ -62,6 +64,7 @@ export function OpenPullRequestDialog() {
       }
 
       setImportResult(body);
+      router.push(`/review/${encodeURIComponent(body.snapshot.id)}?generate=1`);
     } catch {
       setError("The pull request import route is unavailable.");
     } finally {

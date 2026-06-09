@@ -6,6 +6,10 @@ vi.mock("@/components/auth/auth-controls", () => ({
   AuthControls: () => <div data-testid="auth-controls" />,
 }));
 
+vi.mock("@/components/code-review-guide-generation-control", () => ({
+  CodeReviewGuideGenerationControl: () => <button type="button">Regenerate</button>,
+}));
+
 vi.mock("@/components/theme-mode-toggle", () => ({
   ThemeModeToggle: () => <div data-testid="theme-toggle" />,
 }));
