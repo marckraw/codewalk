@@ -215,8 +215,21 @@ function ChangedFilesTreeModel({ onSelectFile, search: searchEnabled = true, sel
   );
 }
 
+// Map the Pierre tree palette onto the app theme tokens. These tokens already
+// flip with the `.dark` class, so the tree tracks light/dark without relying on
+// Pierre's `color-scheme: light dark` + `light-dark()` (which follows the OS).
 const TREE_HOST_STYLE = {
+  "--trees-accent-override": "var(--accent)",
+  "--trees-bg-muted-override": "var(--panel-subtle)",
+  "--trees-bg-override": "var(--background)",
   "--trees-border-color-override": "var(--border)",
+  "--trees-fg-muted-override": "var(--muted)",
   "--trees-fg-override": "var(--foreground)",
+  "--trees-indent-guide-bg-override": "var(--border)",
+  "--trees-input-bg-override": "var(--input)",
+  "--trees-scrollbar-thumb-override": "color-mix(in srgb, var(--muted) 35%, transparent)",
+  "--trees-search-bg-override": "var(--input)",
+  "--trees-search-fg-override": "var(--foreground)",
   "--trees-selected-bg-override": "color-mix(in srgb, var(--accent) 18%, transparent)",
+  "--trees-selected-fg-override": "var(--foreground)",
 } as CSSProperties;
