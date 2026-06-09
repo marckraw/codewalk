@@ -1,5 +1,7 @@
 import { Badge } from "@/components/ui/badge";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelHeader } from "@/components/ui/panel";
+import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 
 export default async function ReviewPage() {
@@ -37,8 +39,13 @@ export default async function ReviewPage() {
           description={user.status === "authenticated" ? user.email ?? user.userId : "Protected route"}
           title="Codewalk review workspace"
         />
-        <div className="p-4 text-sm text-[var(--muted)]">
-          Auth is wired. PR import and persisted workspace data land in the next tickets.
+        <div className="grid min-h-[calc(100vh-137px)] place-items-center p-4">
+          <EmptyState
+            action={<OpenPullRequestDialog />}
+            className="w-full max-w-xl"
+            description="No pull request snapshot is loaded yet. Import a PR to create a review workspace, or open a ready review from a PR comment."
+            title="No review loaded"
+          />
         </div>
       </Panel>
     </main>
