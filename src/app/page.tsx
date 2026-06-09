@@ -4,9 +4,13 @@ import { ThemeModeToggle } from "@/components/theme-mode-toggle";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { Toolbar } from "@/components/ui/toolbar";
+import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { APP_NAME } from "@/lib/product";
 
-export default function Home() {
+export default async function Home() {
+  const user = await getCurrentCodewalkUser();
+  const isAuthenticated = user.status === "authenticated";
+
   return (
     <main className="min-h-screen">
       <header>
@@ -21,7 +25,7 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <OpenPullRequestDialog />
+            {isAuthenticated ? <OpenPullRequestDialog /> : null}
             <ThemeModeToggle />
             <AuthControls />
           </div>
@@ -31,16 +35,24 @@ export default function Home() {
       <section className="px-4 py-4 sm:px-6">
         <Panel className="min-h-[calc(100vh-88px)]">
           <PanelHeader
-            description="Import a GitHub pull request or open a guided review link."
+            description={
+              isAuthenticated
+                ? "Import a GitHub pull request or open a guided review link."
+                : "Sign in with GitHub to import pull requests and open guided reviews."
+            }
             title="Review workspace"
           />
 
           <div className="grid min-h-[calc(100vh-137px)] place-items-center p-4">
             <EmptyState
-              action={<OpenPullRequestDialog />}
+              action={isAuthenticated ? <OpenPullRequestDialog /> : null}
               className="w-full max-w-xl"
-              description="No pull request snapshot is loaded yet. Import a PR to create a review workspace, or open a ready review from a PR comment."
-              title="No review loaded"
+              description={
+                isAuthenticated
+                  ? "No pull request snapshot is loaded yet. Import a PR to create a review workspace, or open a ready review from a PR comment."
+                  : "Use the GitHub sign-in button to start a Codewalk review."
+              }
+              title={isAuthenticated ? "No review loaded" : "Sign in required"}
             />
           </div>
         </Panel>
