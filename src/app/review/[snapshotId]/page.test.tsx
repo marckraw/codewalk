@@ -41,11 +41,12 @@ describe("ReviewSnapshotPage", () => {
     render(await ReviewSnapshotPage({ params: Promise.resolve({ snapshotId: "snapshot-id" }) }));
 
     expect(screen.getByText("Add guided review")).toBeInTheDocument();
-    expect(screen.getByText("ef-global/example #42")).toBeInTheDocument();
-    expect(screen.getByText("Review persistence and API boundaries.")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "1. Guide persistence" })).toBeInTheDocument();
+    expect(screen.getByText(/ef-global\/example/)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Guide/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Guide persistence").length).toBeGreaterThan(0);
+    expect(screen.getByText("The persistence model follows agents-daemon.")).toBeInTheDocument();
     expect(screen.getAllByText("src/lib/db/schema.ts").length).toBeGreaterThan(0);
-    expect(screen.getByText("+export const guides = pgTable(")).toBeInTheDocument();
+    expect(screen.getAllByText("Guide schema changed.").length).toBeGreaterThan(0);
   });
 
   it("renders auth-required state when called without an authenticated user", async () => {

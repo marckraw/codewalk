@@ -2,6 +2,17 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted);
+  --color-card: var(--panel);
+  --color-accent: var(--panel-subtle);
+  --color-border: var(--border);
+  --color-primary: var(--accent);
+  --color-destructive: var(--danger);
+}
+
 :root {
   --background: #f7f7f4;
   --foreground: #18181b;
@@ -73,4 +84,25 @@ input {
 ::selection {
   background: #bfdbfe;
   color: #172554;
+}
+
+.app-scrollbar {
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+  scrollbar-width: thin;
+}
+
+.app-scrollbar::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.app-scrollbar::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 35%, transparent);
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: padding-box;
+}
+
+.app-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
 }
