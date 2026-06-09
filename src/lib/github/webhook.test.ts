@@ -1,10 +1,36 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
+  extractGitHubWebhookJson,
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
   verifyGitHubWebhookSignature,
 } from "./webhook";
+
+describe("extractGitHubWebhookJson", () => {
+  const json = JSON.stringify({ action: "opened" });
+
+  it("returns the body as-is for application/json", () => {
+    expect(extractGitHubWebhookJson({ body: json, contentType: "application/json" })).toBe(json);
+  });
+
+  it("defaults to treating the body as JSON when content type is absent", () => {
+    expect(extractGitHubWebhookJson({ body: json, contentType: null })).toBe(json);
+  });
+
+  it("extracts the payload field for application/x-www-form-urlencoded", () => {
+    const body = `payload=${encodeURIComponent(json)}`;
+    expect(extractGitHubWebhookJson({ body, contentType: "application/x-www-form-urlencoded" })).toBe(json);
+    expect(
+      extractGitHubWebhookJson({ body, contentType: "application/x-www-form-urlencoded; charset=utf-8" }),
+    ).toBe(json);
+  });
+
+  it("returns null for empty or payload-less bodies", () => {
+    expect(extractGitHubWebhookJson({ body: "   ", contentType: "application/json" })).toBeNull();
+    expect(extractGitHubWebhookJson({ body: "other=1", contentType: "application/x-www-form-urlencoded" })).toBeNull();
+  });
+});
 
 describe("GitHub webhook helpers", () => {
   it("validates GitHub sha256 webhook signatures", () => {

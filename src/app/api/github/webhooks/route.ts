@@ -15,6 +15,7 @@ import {
 import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
 import { GitHubClientError } from "@/lib/github/server/errors";
 import {
+  extractGitHubWebhookJson,
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
   verifyGitHubWebhookSignature,
@@ -46,10 +47,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid GitHub webhook signature." }, { status: 401 });
   }
 
+  const jsonText = extractGitHubWebhookJson({
+    body: payloadText,
+    contentType: request.headers.get("content-type"),
+  });
+
+  if (jsonText === null) {
+    logCodewalkWarning("codewalk.github_webhook.invalid_json");
+    return NextResponse.json({ error: "GitHub webhook payload was empty." }, { status: 400 });
+  }
+
   let payload: unknown;
 
   try {
-    payload = JSON.parse(payloadText);
+    payload = JSON.parse(jsonText);
   } catch {
     logCodewalkWarning("codewalk.github_webhook.invalid_json");
     return NextResponse.json({ error: "GitHub webhook payload must be JSON." }, { status: 400 });
@@ -242,6 +253,7 @@ async function postReviewComment(input: {
   const reviewUrl = buildCodewalkReviewUrl({
     appBaseUrl: getCodewalkAppBaseUrl(),
     snapshotId: input.snapshot.id,
+    view: "guide",
   });
   const comment = await upsertCodewalkReviewComment({
     body: buildCodewalkReviewCommentBody({

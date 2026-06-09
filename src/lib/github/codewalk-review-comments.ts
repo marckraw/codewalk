@@ -12,9 +12,15 @@ export type CodewalkReviewCommentInput = {
   state: CodewalkReviewCommentState;
 };
 
-export function buildCodewalkReviewUrl(input: { appBaseUrl: string; snapshotId: string }) {
+export function buildCodewalkReviewUrl(input: { appBaseUrl: string; snapshotId: string; view?: "guide" | "diff" }) {
   const baseUrl = normalizeAppBaseUrl(input.appBaseUrl);
-  return new URL(`/review/${encodeURIComponent(input.snapshotId)}`, `${baseUrl}/`).toString();
+  const url = new URL(`/review/${encodeURIComponent(input.snapshotId)}`, `${baseUrl}/`);
+
+  if (input.view) {
+    url.searchParams.set("view", input.view);
+  }
+
+  return url.toString();
 }
 
 export function getCodewalkAppBaseUrl(env: Record<string, string | undefined> = process.env) {

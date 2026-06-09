@@ -18,6 +18,7 @@ vi.mock("next/server", async (importOriginal) => {
 });
 
 vi.mock("@/lib/github/webhook", () => ({
+  extractGitHubWebhookJson: (input: { body: string }) => input.body,
   getGitHubWebhookConfig: vi.fn(),
   resolveGitHubPullRequestWebhook: vi.fn(),
   verifyGitHubWebhookSignature: vi.fn(),
