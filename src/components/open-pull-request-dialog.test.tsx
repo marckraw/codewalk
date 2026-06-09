@@ -66,4 +66,22 @@ describe("OpenPullRequestDialog", () => {
     expect(await screen.findByText("Imported openai/codex#24 with 4 files, 3 commits, and 2 comments.")).toBeInTheDocument();
     expect(routerPush).toHaveBeenCalledWith("/review/snapshot-id?generate=1");
   });
+
+  it("shows the HTTP status when the import route returns a non-JSON response", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response("<html>not found</html>", {
+        headers: { "Content-Type": "text/html" },
+        status: 404,
+      }),
+    );
+
+    render(<OpenPullRequestDialog />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Open pull request" }));
+    await userEvent.type(screen.getByLabelText("Pull request URL"), "https://github.com/openai/codex/pull/24");
+    await userEvent.click(screen.getByRole("button", { name: "Import PR" }));
+
+    expect(await screen.findByText("The pull request import request failed with HTTP 404.")).toBeInTheDocument();
+    expect(routerPush).not.toHaveBeenCalled();
+  });
 });

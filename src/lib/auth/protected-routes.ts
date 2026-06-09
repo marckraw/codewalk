@@ -1,5 +1,5 @@
-export const PROTECTED_ROUTE_PATTERNS = ["/review(.*)", "/api(.*)"];
+export const PROTECTED_ROUTE_PATTERNS = ["/review(.*)"];
 
 export function isProtectedAppPath(pathname: string) {
-  return pathname === "/review" || pathname.startsWith("/review/") || pathname.startsWith("/api/");
+  return pathname === "/review" || pathname.startsWith("/review/");
 }

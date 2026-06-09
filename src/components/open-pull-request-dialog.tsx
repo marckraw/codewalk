@@ -56,10 +56,10 @@ export function OpenPullRequestDialog() {
         },
         method: "POST",
       });
-      const body = (await response.json()) as PullRequestImportResponse;
+      const body = await readPullRequestImportResponse(response);
 
       if (!response.ok || !body.pullRequest || !body.snapshot || !body.counts) {
-        setError(body.error ?? "The pull request could not be imported.");
+        setError(body.error ?? `The pull request import request failed with HTTP ${response.status}.`);
         return;
       }
 
@@ -149,4 +149,14 @@ export function OpenPullRequestDialog() {
       ) : null}
     </>
   );
+}
+
+async function readPullRequestImportResponse(response: Response): Promise<PullRequestImportResponse> {
+  const contentType = response.headers.get("Content-Type") ?? "";
+
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return {};
+  }
+
+  return (await response.json()) as PullRequestImportResponse;
 }
