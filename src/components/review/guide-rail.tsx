@@ -7,11 +7,12 @@ import type { ReviewWorkspace } from "./review-types";
 interface GuideRailProps {
   activeSectionId: string | null;
   autoGenerate: boolean;
+  onGenerationStart?: () => void;
   onSelectSection: (sectionId: string) => void;
   workspace: ReviewWorkspace;
 }
 
-export function GuideRail({ activeSectionId, autoGenerate, onSelectSection, workspace }: GuideRailProps) {
+export function GuideRail({ activeSectionId, autoGenerate, onGenerationStart, onSelectSection, workspace }: GuideRailProps) {
   return (
     <aside className="flex min-h-0 flex-col border-b border-border lg:border-r lg:border-b-0">
       <div className="flex h-10 shrink-0 items-center justify-between border-b border-border px-3">
@@ -19,7 +20,7 @@ export function GuideRail({ activeSectionId, autoGenerate, onSelectSection, work
         <span className="text-xs text-muted-foreground">{workspace.guide?.sections.length ?? 0}</span>
       </div>
       <div className="border-b border-border px-3 py-2">
-        {renderGuideGenerationState({ autoGenerate, workspace })}
+        {renderGuideGenerationState({ autoGenerate, onGenerationStart, workspace })}
       </div>
       <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
         {!workspace.guide || workspace.guide.sections.length === 0 ? (
@@ -58,7 +59,15 @@ export function GuideRail({ activeSectionId, autoGenerate, onSelectSection, work
   );
 }
 
-function renderGuideGenerationState({ autoGenerate, workspace }: { autoGenerate: boolean; workspace: ReviewWorkspace }) {
+function renderGuideGenerationState({
+  autoGenerate,
+  onGenerationStart,
+  workspace,
+}: {
+  autoGenerate: boolean;
+  onGenerationStart?: () => void;
+  workspace: ReviewWorkspace;
+}) {
   if (workspace.state === "imported") {
     return (
       <div className="grid gap-2">
@@ -69,7 +78,11 @@ function renderGuideGenerationState({ autoGenerate, workspace }: { autoGenerate:
             <p className="mt-1 text-xs text-muted-foreground">Generation has not started.</p>
           </div>
         </div>
-        <CodeReviewGuideGenerationControl autoStart={autoGenerate} snapshotId={workspace.snapshot.id} />
+        <CodeReviewGuideGenerationControl
+          autoStart={autoGenerate}
+          onGenerationStart={onGenerationStart}
+          snapshotId={workspace.snapshot.id}
+        />
       </div>
     );
   }
@@ -98,7 +111,12 @@ function renderGuideGenerationState({ autoGenerate, workspace }: { autoGenerate:
             </p>
           </div>
         </div>
-        <CodeReviewGuideGenerationControl force label="Retry generation" snapshotId={workspace.snapshot.id} />
+        <CodeReviewGuideGenerationControl
+          force
+          label="Retry generation"
+          onGenerationStart={onGenerationStart}
+          snapshotId={workspace.snapshot.id}
+        />
       </div>
     );
   }
@@ -112,7 +130,7 @@ function renderGuideGenerationState({ autoGenerate, workspace }: { autoGenerate:
         </p>
         <p className="mt-1 truncate text-xs text-muted-foreground">Ready for review.</p>
       </div>
-      <CodeReviewGuideGenerationControl force snapshotId={workspace.snapshot.id} />
+      <CodeReviewGuideGenerationControl force onGenerationStart={onGenerationStart} snapshotId={workspace.snapshot.id} />
     </div>
   );
 }
