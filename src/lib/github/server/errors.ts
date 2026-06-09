@@ -36,16 +36,13 @@ type GitHubErrorBody = {
 };
 
 export function missingGitHubAuthError() {
-  return new GitHubClientError(
-    "missing_auth",
-    "Connect GitHub before importing a pull request.",
-  );
+  return new GitHubClientError("missing_auth", "Configure GITHUB_BOT_TOKEN before importing a pull request.");
 }
 
 export function missingGitHubScopeError() {
   return new GitHubClientError(
     "missing_scope",
-    "GitHub did not provide an access token with repository read access.",
+    "The Codewalk GitHub token does not have repository read access.",
   );
 }
 
@@ -57,7 +54,7 @@ export function mapGitHubErrorResponse(response: Response, body: unknown) {
   const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
 
   if (response.status === 401) {
-    return new GitHubClientError("missing_auth", "GitHub rejected the access token. Sign in with GitHub again.", {
+    return new GitHubClientError("missing_auth", "GitHub rejected the Codewalk bot token.", {
       body,
       documentationUrl,
       status: response.status,
@@ -76,7 +73,7 @@ export function mapGitHubErrorResponse(response: Response, body: unknown) {
   if (response.status === 403) {
     return new GitHubClientError(
       "missing_scope",
-      message ?? "GitHub denied access. The connected account may need repository read scope.",
+      message ?? "GitHub denied access. The Codewalk bot token may need repository read scope or org SSO approval.",
       { body, documentationUrl, status: response.status },
     );
   }
@@ -84,7 +81,7 @@ export function mapGitHubErrorResponse(response: Response, body: unknown) {
   if (response.status === 404) {
     return new GitHubClientError(
       "not_found",
-      "GitHub could not find this pull request, or the connected account cannot access the repository.",
+      "GitHub could not find this pull request, or the Codewalk bot token cannot access the repository.",
       { body, documentationUrl, status: response.status },
     );
   }

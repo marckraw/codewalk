@@ -12,10 +12,6 @@ vi.mock("@/lib/db/users", () => ({
   upsertAuthenticatedUser: vi.fn(),
 }));
 
-vi.mock("@/lib/review-authorization", () => ({
-  authorizeReviewSnapshotAccess: vi.fn(),
-}));
-
 vi.mock("@/lib/code-review-guide-generation", async () => {
   const actual = await vi.importActual<typeof import("@/lib/code-review-guide-generation")>(
     "@/lib/code-review-guide-generation",
@@ -30,7 +26,6 @@ vi.mock("@/lib/code-review-guide-generation", async () => {
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { generateAndPersistCodeReviewGuide } from "@/lib/code-review-guide-generation";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
-import { authorizeReviewSnapshotAccess } from "@/lib/review-authorization";
 
 describe("POST /api/code-review-guides/generate", () => {
   beforeEach(() => {
@@ -41,10 +36,6 @@ describe("POST /api/code-review-guides/generate", () => {
       status: "authenticated",
       userId: "clerk-user-id",
     });
-    vi.mocked(authorizeReviewSnapshotAccess).mockResolvedValue({
-      ok: true,
-      snapshot: { id: "snapshot-id" },
-    } as never);
     vi.mocked(upsertAuthenticatedUser).mockResolvedValue({ id: "db-user-id" } as never);
     vi.mocked(generateAndPersistCodeReviewGuide).mockResolvedValue({
       generation: {
@@ -97,22 +88,6 @@ describe("POST /api/code-review-guides/generate", () => {
     const response = await POST(jsonRequest({ snapshotId: "snapshot-id" }));
 
     expect(response.status).toBe(401);
-    expect(generateAndPersistCodeReviewGuide).not.toHaveBeenCalled();
-  });
-
-  it("requires GitHub repository access before generating", async () => {
-    vi.mocked(authorizeReviewSnapshotAccess).mockResolvedValue({
-      ok: false,
-      reason: "github-access-required",
-    });
-
-    const response = await POST(jsonRequest({ snapshotId: "snapshot-id" }));
-
-    expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({
-      error: "Your linked GitHub account must have access to this repository.",
-    });
-    expect(upsertAuthenticatedUser).not.toHaveBeenCalled();
     expect(generateAndPersistCodeReviewGuide).not.toHaveBeenCalled();
   });
 

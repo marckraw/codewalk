@@ -5,7 +5,6 @@ import {
 } from "@/lib/code-review-guide-generation";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
-import { authorizeReviewSnapshotAccess } from "@/lib/review-authorization";
 
 export const maxDuration = 300;
 export const runtime = "nodejs";
@@ -44,19 +43,6 @@ export async function POST(request: Request) {
   }
 
   try {
-    const authorization = await authorizeReviewSnapshotAccess(snapshotId);
-
-    if (!authorization.ok) {
-      if (authorization.reason === "not-found") {
-        return NextResponse.json({ error: "Pull request snapshot was not found." }, { status: 404 });
-      }
-
-      return NextResponse.json(
-        { error: "Your linked GitHub account must have access to this repository." },
-        { status: 403 },
-      );
-    }
-
     const user = await upsertAuthenticatedUser({
       clerkUserId: currentUser.userId,
       email: currentUser.email,

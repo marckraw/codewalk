@@ -22,13 +22,8 @@ vi.mock("@/lib/db/review-workspace", () => ({
   getReviewWorkspace: vi.fn(),
 }));
 
-vi.mock("@/lib/review-authorization", () => ({
-  authorizeReviewSnapshotAccess: vi.fn(),
-}));
-
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { getReviewWorkspace } from "@/lib/db/review-workspace";
-import { authorizeReviewSnapshotAccess } from "@/lib/review-authorization";
 
 describe("ReviewSnapshotPage", () => {
   beforeEach(() => {
@@ -39,10 +34,6 @@ describe("ReviewSnapshotPage", () => {
       status: "authenticated",
       userId: "clerk-user-id",
     });
-    vi.mocked(authorizeReviewSnapshotAccess).mockResolvedValue({
-      ok: true,
-      snapshot: { id: "snapshot-id" },
-    } as never);
     vi.mocked(getReviewWorkspace).mockResolvedValue(fixtureWorkspace as never);
   });
 
@@ -66,17 +57,10 @@ describe("ReviewSnapshotPage", () => {
     expect(getReviewWorkspace).not.toHaveBeenCalled();
   });
 
-  it("does not load review data when GitHub repository access is denied", async () => {
-    vi.mocked(authorizeReviewSnapshotAccess).mockResolvedValue({
-      ok: false,
-      reason: "github-access-required",
-    });
-
+  it("loads review data for any authenticated Codewalk user", async () => {
     render(await ReviewSnapshotPage({ params: Promise.resolve({ snapshotId: "snapshot-id" }) }));
 
-    expect(screen.getByText("Review unavailable")).toBeInTheDocument();
-    expect(screen.getByText("Your linked GitHub account must have access to this repository.")).toBeInTheDocument();
-    expect(getReviewWorkspace).not.toHaveBeenCalled();
+    expect(getReviewWorkspace).toHaveBeenCalledWith("snapshot-id");
   });
 });
 

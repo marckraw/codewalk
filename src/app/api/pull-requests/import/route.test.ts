@@ -3,6 +3,8 @@ import type { NormalizedPullRequestSnapshot } from "@/lib/github/domain";
 import { GitHubClientError } from "@/lib/github/server/errors";
 import { POST } from "./route";
 
+vi.mock("server-only", () => ({}));
+
 vi.mock("@/lib/auth/server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
@@ -15,14 +17,26 @@ vi.mock("@/lib/db/pull-request-snapshots", () => ({
   persistPullRequestSnapshot: vi.fn(),
 }));
 
-vi.mock("@/lib/github/server/clerk-token", () => ({
-  createCurrentUserGitHubRestClient: vi.fn(),
+vi.mock("@/lib/github/server/bot-token", () => ({
+  createServerGitHubRestClient: vi.fn(),
 }));
+
+vi.mock("@/lib/github/server/config", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/github/server/config")>(
+    "@/lib/github/server/config",
+  );
+
+  return {
+    ...actual,
+    getGitHubAutomationConfig: vi.fn(),
+  };
+});
 
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
-import { createCurrentUserGitHubRestClient } from "@/lib/github/server/clerk-token";
+import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
+import { getGitHubAutomationConfig } from "@/lib/github/server/config";
 
 describe("POST /api/pull-requests/import", () => {
   beforeEach(() => {
@@ -34,7 +48,12 @@ describe("POST /api/pull-requests/import", () => {
       userId: "clerk-user-id",
     });
     vi.mocked(upsertAuthenticatedUser).mockResolvedValue({ id: "db-user-id" } as never);
-    vi.mocked(createCurrentUserGitHubRestClient).mockResolvedValue({
+    vi.mocked(getGitHubAutomationConfig).mockReturnValue({
+      allowedOwner: "openai",
+      botToken: "gh-bot-token",
+      ok: true,
+    });
+    vi.mocked(createServerGitHubRestClient).mockReturnValue({
       getPullRequestSnapshot: vi.fn().mockResolvedValue(fixtureSnapshot),
     } as never);
     vi.mocked(persistPullRequestSnapshot).mockResolvedValue({
@@ -70,6 +89,7 @@ describe("POST /api/pull-requests/import", () => {
       importedByUserId: "db-user-id",
       snapshot: fixtureSnapshot,
     });
+    expect(createServerGitHubRestClient).toHaveBeenCalledWith("gh-bot-token");
   });
 
   it("returns parser errors before touching auth or GitHub", async () => {
@@ -88,10 +108,11 @@ describe("POST /api/pull-requests/import", () => {
     await expect(response.json()).resolves.toEqual({
       error: "Sign in with GitHub before importing a pull request.",
     });
+    expect(getGitHubAutomationConfig).not.toHaveBeenCalled();
   });
 
   it("maps GitHub client errors to API responses", async () => {
-    vi.mocked(createCurrentUserGitHubRestClient).mockResolvedValue({
+    vi.mocked(createServerGitHubRestClient).mockReturnValue({
       getPullRequestSnapshot: vi.fn().mockRejectedValue(
         new GitHubClientError("not_found", "GitHub could not find this pull request."),
       ),
@@ -104,6 +125,22 @@ describe("POST /api/pull-requests/import", () => {
       code: "not_found",
       error: "GitHub could not find this pull request.",
     });
+  });
+
+  it("limits manual imports to the configured GitHub owner", async () => {
+    vi.mocked(getGitHubAutomationConfig).mockReturnValue({
+      allowedOwner: "ef-global",
+      botToken: "gh-bot-token",
+      ok: true,
+    });
+
+    const response = await POST(jsonRequest({ url: "https://github.com/openai/codex/pull/24" }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Codewalk can only import pull requests from ef-global.",
+    });
+    expect(createServerGitHubRestClient).not.toHaveBeenCalled();
   });
 });
 

@@ -9,7 +9,6 @@ import { Toolbar } from "@/components/ui/toolbar";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { getReviewWorkspace, type ReviewWorkspaceData } from "@/lib/db/review-workspace";
 import { APP_NAME } from "@/lib/product";
-import { authorizeReviewSnapshotAccess } from "@/lib/review-authorization";
 import { AlertTriangle, CheckCircle2, Clock3, FileCode2, GitPullRequestArrow, ListChecks } from "lucide-react";
 
 type ReviewSnapshotPageProps = {
@@ -60,26 +59,6 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
             actions={<Badge tone="warning">auth required</Badge>}
             description="Sign in with GitHub to open this guided review."
             title="Protected review"
-          />
-        </Panel>
-      </Shell>
-    );
-  }
-
-  const authorization = await authorizeReviewSnapshotAccess(snapshotId);
-
-  if (!authorization.ok) {
-    if (authorization.reason === "not-found") {
-      notFound();
-    }
-
-    return (
-      <Shell>
-        <Panel className="mx-4 mt-4 max-w-2xl sm:mx-6">
-          <PanelHeader
-            actions={<Badge tone="danger">access denied</Badge>}
-            description="Your linked GitHub account must have access to this repository."
-            title="Review unavailable"
           />
         </Panel>
       </Shell>

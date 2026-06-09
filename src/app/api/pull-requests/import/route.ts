@@ -3,7 +3,8 @@ import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
 import { parseGitHubPullRequestUrl } from "@/lib/github/pull-request-url";
-import { createCurrentUserGitHubRestClient } from "@/lib/github/server/clerk-token";
+import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
+import { getGitHubAutomationConfig, isAllowedGitHubOwner } from "@/lib/github/server/config";
 import { GitHubClientError } from "@/lib/github/server/errors";
 
 export async function POST(request: Request) {
@@ -40,13 +41,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Sign in with GitHub before importing a pull request." }, { status: 401 });
   }
 
+  const githubConfig = getGitHubAutomationConfig();
+
+  if (!githubConfig.ok) {
+    return NextResponse.json(
+      { error: githubConfig.message, missingKeys: githubConfig.missingKeys },
+      { status: 503 },
+    );
+  }
+
+  if (!isAllowedGitHubOwner(parsed.pullRequest.owner, githubConfig.allowedOwner)) {
+    return NextResponse.json(
+      { error: `Codewalk can only import pull requests from ${githubConfig.allowedOwner}.` },
+      { status: 403 },
+    );
+  }
+
   try {
     const user = await upsertAuthenticatedUser({
       clerkUserId: currentUser.userId,
       email: currentUser.email,
       name: currentUser.name,
     });
-    const github = await createCurrentUserGitHubRestClient();
+    const github = createServerGitHubRestClient(githubConfig.botToken);
     const snapshot = await github.getPullRequestSnapshot(parsed.pullRequest);
     const persistedSnapshot = await persistPullRequestSnapshot({
       importedByUserId: user.id,
