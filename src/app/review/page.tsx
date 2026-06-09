@@ -2,7 +2,9 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Panel, PanelHeader } from "@/components/ui/panel";
 import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
+import { ReviewDashboard } from "@/components/review/review-dashboard";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
+import { listReviewWorkspaces } from "@/lib/db/review-workspace";
 
 export default async function ReviewPage() {
   const user = await getCurrentCodewalkUser();
@@ -31,22 +33,47 @@ export default async function ReviewPage() {
     );
   }
 
+  if (user.status === "signed-out") {
+    return (
+      <main className="min-h-screen p-4 sm:p-6">
+        <Panel className="max-w-2xl">
+          <PanelHeader
+            actions={<Badge tone="warning">auth required</Badge>}
+            description="Sign in with GitHub to view guided reviews."
+            title="Protected reviews"
+          />
+        </Panel>
+      </main>
+    );
+  }
+
+  const workspaces = await listReviewWorkspaces();
+
   return (
     <main className="min-h-screen p-4 sm:p-6">
       <Panel>
         <PanelHeader
-          actions={<Badge tone="success">authenticated</Badge>}
-          description={user.status === "authenticated" ? user.email ?? user.userId : "Protected route"}
-          title="Codewalk review workspace"
+          actions={
+            <>
+              <Badge tone="muted">{workspaces.length} reviews</Badge>
+              <OpenPullRequestDialog />
+            </>
+          }
+          description="Recent pull request snapshots and their guided review status."
+          title="Codewalk reviews"
         />
-        <div className="grid min-h-[calc(100vh-137px)] place-items-center p-4">
-          <EmptyState
-            action={<OpenPullRequestDialog />}
-            className="w-full max-w-xl"
-            description="No pull request snapshot is loaded yet. Import a PR to create a review workspace, or open a ready review from a PR comment."
-            title="No review loaded"
-          />
-        </div>
+        {workspaces.length === 0 ? (
+          <div className="grid min-h-[calc(100vh-137px)] place-items-center p-4">
+            <EmptyState
+              action={<OpenPullRequestDialog />}
+              className="w-full max-w-xl"
+              description="No pull request snapshot has been imported yet. Import a PR to create a review workspace, or open a ready review from a PR comment."
+              title="No reviews yet"
+            />
+          </div>
+        ) : (
+          <ReviewDashboard items={workspaces} />
+        )}
       </Panel>
     </main>
   );
