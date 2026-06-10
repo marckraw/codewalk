@@ -1,7 +1,8 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { NormalizedPullRequestSnapshot } from "@/lib/github/domain";
+import type { GitHubPullRequestRef } from "@/lib/github/pull-request-url";
 import { getDb } from "./client";
 import {
   pullRequestComments,
@@ -149,6 +150,26 @@ export async function persistPullRequestSnapshot(input: PersistPullRequestSnapsh
 export async function getPullRequestSnapshotById(snapshotId: string): Promise<PullRequestSnapshotRow | null> {
   const db = getDb();
   const [snapshot] = await db.select().from(pullRequestSnapshots).where(eq(pullRequestSnapshots.id, snapshotId)).limit(1);
+
+  return snapshot ?? null;
+}
+
+export async function getLatestPullRequestSnapshotByRef(
+  ref: GitHubPullRequestRef,
+): Promise<PullRequestSnapshotRow | null> {
+  const db = getDb();
+  const [snapshot] = await db
+    .select()
+    .from(pullRequestSnapshots)
+    .where(
+      and(
+        eq(pullRequestSnapshots.owner, ref.owner),
+        eq(pullRequestSnapshots.repo, ref.repo),
+        eq(pullRequestSnapshots.number, ref.number),
+      ),
+    )
+    .orderBy(desc(pullRequestSnapshots.updatedAt), desc(pullRequestSnapshots.importedAt))
+    .limit(1);
 
   return snapshot ?? null;
 }

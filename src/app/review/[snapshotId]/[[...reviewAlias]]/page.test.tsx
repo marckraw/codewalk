@@ -1,6 +1,21 @@
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import ReviewSnapshotPage from "./page";
+
+const redirectMock = vi.hoisted(() =>
+  vi.fn((path: string) => {
+    throw new Error(`NEXT_REDIRECT:${path}`);
+  }),
+);
+const notFoundMock = vi.hoisted(() =>
+  vi.fn(() => {
+    throw new Error("NEXT_NOT_FOUND");
+  }),
+);
+
+vi.mock("next/navigation", () => ({
+  notFound: notFoundMock,
+  redirect: redirectMock,
+}));
 
 vi.mock("@/components/auth/auth-controls", () => ({
   AuthControls: () => <div data-testid="auth-controls" />,
@@ -18,12 +33,18 @@ vi.mock("@/lib/auth/server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
 
+vi.mock("@/lib/db/pull-request-snapshots", () => ({
+  getLatestPullRequestSnapshotByRef: vi.fn(),
+}));
+
 vi.mock("@/lib/db/review-workspace", () => ({
   getReviewWorkspace: vi.fn(),
 }));
 
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
+import { getLatestPullRequestSnapshotByRef } from "@/lib/db/pull-request-snapshots";
 import { getReviewWorkspace } from "@/lib/db/review-workspace";
+import ReviewSnapshotPage, { buildReviewPullRequestAliasRedirectPath } from "./page";
 
 describe("ReviewSnapshotPage", () => {
   beforeEach(() => {
@@ -62,6 +83,85 @@ describe("ReviewSnapshotPage", () => {
     render(await ReviewSnapshotPage({ params: Promise.resolve({ snapshotId: "snapshot-id" }) }));
 
     expect(getReviewWorkspace).toHaveBeenCalledWith("snapshot-id");
+  });
+
+  it("redirects a GitHub-shaped alias to the matching snapshot review", async () => {
+    vi.mocked(getLatestPullRequestSnapshotByRef).mockResolvedValue({ id: "snapshot-id" } as never);
+
+    await expect(
+      ReviewSnapshotPage({
+        params: Promise.resolve({
+          reviewAlias: ["backpack", "pull", "2083"],
+          snapshotId: "ef-global",
+        }),
+        searchParams: Promise.resolve({ section: "section-id" }),
+      }),
+    ).rejects.toThrow("NEXT_REDIRECT:/review/snapshot-id?section=section-id&view=guide");
+
+    expect(getLatestPullRequestSnapshotByRef).toHaveBeenCalledWith({
+      number: 2083,
+      owner: "ef-global",
+      repo: "backpack",
+    });
+    expect(getReviewWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("returns not found for invalid pull request aliases", async () => {
+    await expect(
+      ReviewSnapshotPage({
+        params: Promise.resolve({
+          reviewAlias: ["backpack", "pull", "0"],
+          snapshotId: "ef-global",
+        }),
+      }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+
+    expect(getLatestPullRequestSnapshotByRef).not.toHaveBeenCalled();
+    expect(getReviewWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("returns not found when no snapshot exists for the pull request", async () => {
+    vi.mocked(getLatestPullRequestSnapshotByRef).mockResolvedValue(null);
+
+    await expect(
+      ReviewSnapshotPage({
+        params: Promise.resolve({
+          reviewAlias: ["backpack", "pull", "2083"],
+          snapshotId: "ef-global",
+        }),
+      }),
+    ).rejects.toThrow("NEXT_NOT_FOUND");
+
+    expect(getReviewWorkspace).not.toHaveBeenCalled();
+  });
+});
+
+describe("buildReviewPullRequestAliasRedirectPath", () => {
+  it("preserves explicit deep-link params and keeps the requested view", () => {
+    expect(
+      buildReviewPullRequestAliasRedirectPath({
+        searchParams: { file: "src/app/page.tsx", view: "diff" },
+        snapshotId: "snapshot-id",
+      }),
+    ).toBe("/review/snapshot-id?file=src%2Fapp%2Fpage.tsx&view=diff");
+  });
+
+  it("defaults readable aliases to the guide view", () => {
+    expect(
+      buildReviewPullRequestAliasRedirectPath({
+        searchParams: {},
+        snapshotId: "snapshot-id",
+      }),
+    ).toBe("/review/snapshot-id?view=guide");
+  });
+
+  it("encodes snapshot ids and repeated query params", () => {
+    expect(
+      buildReviewPullRequestAliasRedirectPath({
+        searchParams: { section: ["a", "b"] },
+        snapshotId: "snapshot id",
+      }),
+    ).toBe("/review/snapshot%20id?section=a&section=b&view=guide");
   });
 });
 
