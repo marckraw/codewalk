@@ -1,19 +1,19 @@
-"use client";
+'use client'
 
-import type { CSSProperties, KeyboardEvent } from "react";
-import { useEffect, useMemo } from "react";
-import { FileTree as PierreFileTreeModel } from "@pierre/trees";
-import { FileTree, useFileTreeSearch } from "@pierre/trees/react";
-import { ChevronDown, ChevronUp, Search, X } from "lucide-react";
-import { Button } from "@/shared/ui/button";
-import { TextField } from "@/shared/ui/text-field";
-import type { PierreChangedFilesTreeInput } from "./changed-files-tree.pure";
+import type { CSSProperties, KeyboardEvent } from 'react'
+import { useEffect, useMemo } from 'react'
+import { FileTree as PierreFileTreeModel } from '@pierre/trees'
+import { FileTree, useFileTreeSearch } from '@pierre/trees/react'
+import { ChevronDown, ChevronUp, Search, X } from 'lucide-react'
+import { Button } from '@/shared/ui/button'
+import { TextField } from '@/shared/ui/text-field'
+import type { PierreChangedFilesTreeInput } from './changed-files-tree.pure'
 
 interface ChangedFilesTreeModelProps {
-  onSelectFile?: (file: string) => void;
-  search?: boolean;
-  selectedFile: string | null;
-  treeInput: PierreChangedFilesTreeInput;
+  onSelectFile?: (file: string) => void
+  search?: boolean
+  selectedFile: string | null
+  treeInput: PierreChangedFilesTreeInput
 }
 
 export function ChangedFilesTreeModel({
@@ -25,71 +25,77 @@ export function ChangedFilesTreeModel({
   const model = useMemo(
     () =>
       new PierreFileTreeModel({
-        density: "compact",
-        fileTreeSearchMode: "hide-non-matches",
+        density: 'compact',
+        fileTreeSearchMode: 'hide-non-matches',
         flattenEmptyDirectories: true,
         gitStatus: treeInput.gitStatus,
-        initialExpansion: "open",
+        initialExpansion: 'open',
         initialSelectedPaths: selectedFile ? [selectedFile] : [],
         onSelectionChange: (selectedPaths) => {
-          const nextFile = selectedPaths[0];
+          const nextFile = selectedPaths[0]
           if (nextFile) {
-            onSelectFile?.(nextFile);
+            onSelectFile?.(nextFile)
           }
         },
         paths: treeInput.paths,
         search: searchEnabled,
-        searchBlurBehavior: "retain",
+        searchBlurBehavior: 'retain',
       }),
-    [onSelectFile, searchEnabled, selectedFile, treeInput.gitStatus, treeInput.paths],
-  );
+    [
+      onSelectFile,
+      searchEnabled,
+      selectedFile,
+      treeInput.gitStatus,
+      treeInput.paths,
+    ],
+  )
 
   useEffect(() => {
-    return () => model.cleanUp();
-  }, [model]);
+    return () => model.cleanUp()
+  }, [model])
 
-  const treeSearch = useFileTreeSearch(model);
+  const treeSearch = useFileTreeSearch(model)
 
   useEffect(() => {
-    const selectedPaths = model.getSelectedPaths();
+    const selectedPaths = model.getSelectedPaths()
 
     if (!selectedFile) {
       for (const path of selectedPaths) {
-        model.getItem(path)?.deselect();
+        model.getItem(path)?.deselect()
       }
-      return;
+      return
     }
 
     if (selectedPaths.length === 1 && selectedPaths[0] === selectedFile) {
-      return;
+      return
     }
 
     for (const path of selectedPaths) {
       if (path !== selectedFile) {
-        model.getItem(path)?.deselect();
+        model.getItem(path)?.deselect()
       }
     }
 
-    const selectedItem = model.getItem(selectedFile);
-    selectedItem?.select();
-    selectedItem?.focus();
-  }, [model, selectedFile]);
+    const selectedItem = model.getItem(selectedFile)
+    selectedItem?.select()
+    selectedItem?.focus()
+  }, [model, selectedFile])
 
   const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Escape") {
-      treeSearch.setValue(null);
-      treeSearch.close();
-      return;
+    if (event.key === 'Escape') {
+      treeSearch.setValue(null)
+      treeSearch.close()
+      return
     }
 
-    if (event.key === "Enter") {
+    if (event.key === 'Enter') {
       if (event.shiftKey) {
-        treeSearch.focusPreviousMatch();
+        treeSearch.focusPreviousMatch()
       } else {
-        treeSearch.focusNextMatch();
+        treeSearch.focusNextMatch()
       }
     }
-  };
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -103,7 +109,7 @@ export function ChangedFilesTreeModel({
                 onChange={(event) => treeSearch.setValue(event.target.value)}
                 onKeyDown={handleSearchKeyDown}
                 placeholder="Search files"
-                value={treeSearch.value ?? ""}
+                value={treeSearch.value ?? ''}
               />
               {treeSearch.value ? (
                 <span className="w-10 text-right text-[10px] text-muted-foreground tabular-nums">
@@ -113,7 +119,9 @@ export function ChangedFilesTreeModel({
               <Button
                 aria-label="Previous search match"
                 className="size-7"
-                disabled={!treeSearch.value || treeSearch.matchingPaths.length === 0}
+                disabled={
+                  !treeSearch.value || treeSearch.matchingPaths.length === 0
+                }
                 onClick={treeSearch.focusPreviousMatch}
                 size="icon"
                 title="Previous match"
@@ -125,7 +133,9 @@ export function ChangedFilesTreeModel({
               <Button
                 aria-label="Next search match"
                 className="size-7"
-                disabled={!treeSearch.value || treeSearch.matchingPaths.length === 0}
+                disabled={
+                  !treeSearch.value || treeSearch.matchingPaths.length === 0
+                }
                 onClick={treeSearch.focusNextMatch}
                 size="icon"
                 title="Next match"
@@ -138,8 +148,8 @@ export function ChangedFilesTreeModel({
                 aria-label="Close changed-files search"
                 className="size-7"
                 onClick={() => {
-                  treeSearch.setValue(null);
-                  treeSearch.close();
+                  treeSearch.setValue(null)
+                  treeSearch.close()
                 }}
                 size="icon"
                 title="Close search"
@@ -164,26 +174,33 @@ export function ChangedFilesTreeModel({
           )}
         </div>
       ) : null}
-      <FileTree aria-label="Changed files" className="min-h-0 w-full flex-1" model={model} style={TREE_HOST_STYLE} />
+      <FileTree
+        aria-label="Changed files"
+        className="min-h-0 w-full flex-1"
+        model={model}
+        style={TREE_HOST_STYLE}
+      />
     </div>
-  );
+  )
 }
 
 // Map the Pierre tree palette onto the app theme tokens. These tokens already
 // flip with the `.dark` class, so the tree tracks light/dark without relying on
 // Pierre's `color-scheme: light dark` + `light-dark()` (which follows the OS).
 const TREE_HOST_STYLE = {
-  "--trees-accent-override": "var(--accent)",
-  "--trees-bg-muted-override": "var(--panel-subtle)",
-  "--trees-bg-override": "var(--background)",
-  "--trees-border-color-override": "var(--border)",
-  "--trees-fg-muted-override": "var(--muted)",
-  "--trees-fg-override": "var(--foreground)",
-  "--trees-indent-guide-bg-override": "var(--border)",
-  "--trees-input-bg-override": "var(--input)",
-  "--trees-scrollbar-thumb-override": "color-mix(in srgb, var(--muted) 35%, transparent)",
-  "--trees-search-bg-override": "var(--input)",
-  "--trees-search-fg-override": "var(--foreground)",
-  "--trees-selected-bg-override": "color-mix(in srgb, var(--accent) 18%, transparent)",
-  "--trees-selected-fg-override": "var(--foreground)",
-} as CSSProperties;
+  '--trees-accent-override': 'var(--accent)',
+  '--trees-bg-muted-override': 'var(--panel-subtle)',
+  '--trees-bg-override': 'var(--background)',
+  '--trees-border-color-override': 'var(--border)',
+  '--trees-fg-muted-override': 'var(--muted)',
+  '--trees-fg-override': 'var(--foreground)',
+  '--trees-indent-guide-bg-override': 'var(--border)',
+  '--trees-input-bg-override': 'var(--input)',
+  '--trees-scrollbar-thumb-override':
+    'color-mix(in srgb, var(--muted) 35%, transparent)',
+  '--trees-search-bg-override': 'var(--input)',
+  '--trees-search-fg-override': 'var(--foreground)',
+  '--trees-selected-bg-override':
+    'color-mix(in srgb, var(--accent) 18%, transparent)',
+  '--trees-selected-fg-override': 'var(--foreground)',
+} as CSSProperties

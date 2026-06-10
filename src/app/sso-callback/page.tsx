@@ -1,6 +1,9 @@
-import { SsoCallback } from "@/features/auth";
-import { Panel, PanelHeader } from "@/shared/ui/panel";
-import { getMissingClerkEnvironmentKeys, isClerkServerConfigured } from "@/entities/auth-server";
+import { SsoCallback } from '@/features/auth'
+import { Panel, PanelHeader } from '@/shared/ui/panel'
+import {
+  getMissingClerkEnvironmentKeys,
+  isClerkServerConfigured,
+} from '@/entities/auth-server'
 
 export default function SsoCallbackPage() {
   if (!isClerkServerConfigured()) {
@@ -13,7 +16,8 @@ export default function SsoCallbackPage() {
           />
           <div className="grid gap-3 p-4 text-sm">
             <p className="text-[var(--muted)]">
-              Add the missing keys to `.env.local`, then restart the development server.
+              Add the missing keys to `.env.local`, then restart the development
+              server.
             </p>
             <ul className="list-inside list-disc font-mono text-xs text-[var(--foreground)]">
               {getMissingClerkEnvironmentKeys().map((key) => (
@@ -23,8 +27,8 @@ export default function SsoCallbackPage() {
           </div>
         </Panel>
       </main>
-    );
+    )
   }
 
-  return <SsoCallback />;
+  return <SsoCallback />
 }

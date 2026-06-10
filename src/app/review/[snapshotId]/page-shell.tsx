@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
-import { SiteHeader } from "@/widgets/site-header";
+import type { ReactNode } from 'react'
+import { SiteHeader } from '@/widgets/site-header'
 
 export function ReviewSnapshotPageShell({ children }: { children: ReactNode }) {
   return (
@@ -7,5 +7,5 @@ export function ReviewSnapshotPageShell({ children }: { children: ReactNode }) {
       <SiteHeader />
       {children}
     </main>
-  );
+  )
 }

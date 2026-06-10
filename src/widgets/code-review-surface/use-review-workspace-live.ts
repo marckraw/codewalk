@@ -1,21 +1,21 @@
-"use client";
+'use client'
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import type { ReviewWorkspace } from "./review-types";
+import { useCallback, useEffect, useRef, useState } from 'react'
+import type { ReviewWorkspace } from './review-types'
 import {
   REVIEW_WORKSPACE_POLL_INTERVAL_MS,
   shouldPollReviewWorkspace,
-} from "./use-review-workspace-live.pure";
+} from './use-review-workspace-live.pure'
 
 interface UseReviewWorkspaceLiveOptions {
-  autoGenerate: boolean;
+  autoGenerate: boolean
 }
 
 interface UseReviewWorkspaceLiveResult {
   /** Notify the hook that a generation request has been kicked off locally. */
-  markGenerationStarted: () => void;
+  markGenerationStarted: () => void
   /** The latest known workspace, refreshed by polling while a guide is preparing. */
-  workspace: ReviewWorkspace;
+  workspace: ReviewWorkspace
 }
 
 /**
@@ -27,52 +27,55 @@ export function useReviewWorkspaceLive(
   initialWorkspace: ReviewWorkspace,
   { autoGenerate }: UseReviewWorkspaceLiveOptions,
 ): UseReviewWorkspaceLiveResult {
-  const snapshotId = initialWorkspace.snapshot.id;
-  const [workspace, setWorkspace] = useState<ReviewWorkspace>(initialWorkspace);
-  const [pending, setPending] = useState(autoGenerate);
+  const snapshotId = initialWorkspace.snapshot.id
+  const [workspace, setWorkspace] = useState<ReviewWorkspace>(initialWorkspace)
+  const [pending, setPending] = useState(autoGenerate)
 
   // Reset when the route points at a different snapshot (client navigation).
-  const lastSnapshotId = useRef(snapshotId);
+  const lastSnapshotId = useRef(snapshotId)
   useEffect(() => {
     if (lastSnapshotId.current !== snapshotId) {
-      lastSnapshotId.current = snapshotId;
-      setWorkspace(initialWorkspace);
-      setPending(autoGenerate);
+      lastSnapshotId.current = snapshotId
+      setWorkspace(initialWorkspace)
+      setPending(autoGenerate)
     }
-  }, [autoGenerate, initialWorkspace, snapshotId]);
+  }, [autoGenerate, initialWorkspace, snapshotId])
 
-  const active = shouldPollReviewWorkspace(workspace.state, pending);
+  const active = shouldPollReviewWorkspace(workspace.state, pending)
 
   useEffect(() => {
     if (!active) {
-      return;
+      return
     }
 
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
 
     const poll = async () => {
       try {
-        const response = await fetch(`/api/review-workspaces/${encodeURIComponent(snapshotId)}`, {
-          cache: "no-store",
-        });
+        const response = await fetch(
+          `/api/review-workspaces/${encodeURIComponent(snapshotId)}`,
+          {
+            cache: 'no-store',
+          },
+        )
 
         if (cancelled) {
-          return;
+          return
         }
 
         if (response.ok) {
-          const next = (await response.json()) as ReviewWorkspace;
+          const next = (await response.json()) as ReviewWorkspace
 
           if (cancelled) {
-            return;
+            return
           }
 
-          setWorkspace(next);
+          setWorkspace(next)
 
-          if (next.state === "ready" || next.state === "failed") {
-            setPending(false);
-            return;
+          if (next.state === 'ready' || next.state === 'failed') {
+            setPending(false)
+            return
           }
         }
       } catch {
@@ -80,26 +83,30 @@ export function useReviewWorkspaceLive(
       }
 
       if (!cancelled) {
-        timer = setTimeout(() => void poll(), REVIEW_WORKSPACE_POLL_INTERVAL_MS);
+        timer = setTimeout(() => void poll(), REVIEW_WORKSPACE_POLL_INTERVAL_MS)
       }
-    };
+    }
 
-    timer = setTimeout(() => void poll(), REVIEW_WORKSPACE_POLL_INTERVAL_MS);
+    timer = setTimeout(() => void poll(), REVIEW_WORKSPACE_POLL_INTERVAL_MS)
 
     return () => {
-      cancelled = true;
+      cancelled = true
       if (timer) {
-        clearTimeout(timer);
+        clearTimeout(timer)
       }
-    };
-  }, [active, snapshotId]);
+    }
+  }, [active, snapshotId])
 
   const markGenerationStarted = useCallback(() => {
-    setPending(true);
+    setPending(true)
     // Optimistically reflect that work has begun so the preparing state shows
     // immediately, before the first poll observes the running generation row.
-    setWorkspace((current) => (current.state === "imported" ? { ...current, state: "preparing" } : current));
-  }, []);
+    setWorkspace((current) =>
+      current.state === 'imported'
+        ? { ...current, state: 'preparing' }
+        : current,
+    )
+  }, [])
 
-  return { markGenerationStarted, workspace };
+  return { markGenerationStarted, workspace }
 }

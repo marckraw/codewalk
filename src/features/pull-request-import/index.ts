@@ -1,1 +1,1 @@
-export { OpenPullRequestDialog } from "./open-pull-request-dialog";
+export { OpenPullRequestDialog } from './open-pull-request-dialog'

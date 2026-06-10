@@ -1,1 +1,1 @@
-export { ThemeModeToggle } from "./theme-mode-toggle";
+export { ThemeModeToggle } from './theme-mode-toggle'

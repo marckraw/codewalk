@@ -1,7 +1,7 @@
-import "server-only";
+import 'server-only'
 
-import { and, eq, notInArray } from "drizzle-orm";
-import { getDb } from "./client";
+import { and, eq, notInArray } from 'drizzle-orm'
+import { getDb } from './client'
 import {
   guideSectionFiles,
   guideSections,
@@ -14,62 +14,64 @@ import {
   type CodeReviewGuideRiskLevel,
   type CodeReviewGuideStatus,
   type CodeReviewGuideSummary,
-} from "./schema";
+} from './schema'
 
 export type CodeReviewGuideFile = {
-  path: string;
-  status: string;
-  reason: string;
-  hunkHints: string[];
-};
+  path: string
+  status: string
+  reason: string
+  hunkHints: string[]
+}
 
 export type CodeReviewGuideSection = {
-  id: string;
-  title: string;
-  summary: string;
-  narrative: string;
-  riskLevel: CodeReviewGuideRiskLevel;
-  riskRationale: string;
-  checklist: string[];
-  files: CodeReviewGuideFile[];
-};
+  id: string
+  title: string
+  summary: string
+  narrative: string
+  riskLevel: CodeReviewGuideRiskLevel
+  riskRationale: string
+  checklist: string[]
+  files: CodeReviewGuideFile[]
+}
 
 export type CodeReviewGuide = {
-  id: string;
-  repository: string;
-  pullRequestNumber: number;
-  targetId: string;
-  mode: CodeReviewGuideMode;
-  cacheIdentity: CodeReviewCacheIdentity;
-  provider: CodeReviewGuideProvider;
-  model: string;
-  effort: string | null;
-  status: CodeReviewGuideStatus;
-  overview: string;
-  generatedBy: CodeReviewGuideGenerator;
-  sections: CodeReviewGuideSection[];
-  error: string | null;
-  pullRequest: CodeReviewGuidePullRequestMetadata;
-  summary: CodeReviewGuideSummary;
-  createdAt: string;
-  updatedAt: string;
-};
+  id: string
+  repository: string
+  pullRequestNumber: number
+  targetId: string
+  mode: CodeReviewGuideMode
+  cacheIdentity: CodeReviewCacheIdentity
+  provider: CodeReviewGuideProvider
+  model: string
+  effort: string | null
+  status: CodeReviewGuideStatus
+  overview: string
+  generatedBy: CodeReviewGuideGenerator
+  sections: CodeReviewGuideSection[]
+  error: string | null
+  pullRequest: CodeReviewGuidePullRequestMetadata
+  summary: CodeReviewGuideSummary
+  createdAt: string
+  updatedAt: string
+}
 
 export type PersistCodeReviewGuideInput = {
-  snapshotId: string;
-  guide: CodeReviewGuide;
-};
+  snapshotId: string
+  guide: CodeReviewGuide
+}
 
-export function buildCodeReviewGuideCacheKey(cacheIdentity: CodeReviewCacheIdentity): string {
+export function buildCodeReviewGuideCacheKey(
+  cacheIdentity: CodeReviewCacheIdentity,
+): string {
   return JSON.stringify({
     comparisonRef: cacheIdentity.comparisonRef,
     comparisonPoint: cacheIdentity.comparisonPoint,
     workingTreeVersionToken: cacheIdentity.workingTreeVersionToken,
-  });
+  })
 }
 
 export function buildCodeReviewGuideRows(input: PersistCodeReviewGuideInput) {
-  const { guide, snapshotId } = input;
+  const { guide, snapshotId } = input
 
   return {
     guide: {
@@ -112,12 +114,14 @@ export function buildCodeReviewGuideRows(input: PersistCodeReviewGuideInput) {
         title: section.title,
       },
     })),
-  };
+  }
 }
 
-export async function persistCodeReviewGuide(input: PersistCodeReviewGuideInput) {
-  const db = getDb();
-  const rows = buildCodeReviewGuideRows(input);
+export async function persistCodeReviewGuide(
+  input: PersistCodeReviewGuideInput,
+) {
+  const db = getDb()
+  const rows = buildCodeReviewGuideRows(input)
 
   return db.transaction(async (tx) => {
     const [guide] = await tx
@@ -143,18 +147,25 @@ export async function persistCodeReviewGuide(input: PersistCodeReviewGuideInput)
         },
         target: [guides.snapshotId, guides.mode, guides.cacheKey],
       })
-      .returning();
+      .returning()
 
     if (rows.sections.length === 0) {
-      await tx.delete(guideSections).where(eq(guideSections.guideId, guide.id));
-      return guide;
+      await tx.delete(guideSections).where(eq(guideSections.guideId, guide.id))
+      return guide
     }
 
-    const daemonSectionIds = rows.sections.map(({ section }) => section.daemonSectionId);
+    const daemonSectionIds = rows.sections.map(
+      ({ section }) => section.daemonSectionId,
+    )
 
     await tx
       .delete(guideSections)
-      .where(and(eq(guideSections.guideId, guide.id), notInArray(guideSections.daemonSectionId, daemonSectionIds)));
+      .where(
+        and(
+          eq(guideSections.guideId, guide.id),
+          notInArray(guideSections.daemonSectionId, daemonSectionIds),
+        ),
+      )
 
     for (const row of rows.sections) {
       const [section] = await tx
@@ -172,17 +183,21 @@ export async function persistCodeReviewGuide(input: PersistCodeReviewGuideInput)
           },
           target: [guideSections.guideId, guideSections.daemonSectionId],
         })
-        .returning();
+        .returning()
 
-      await tx.delete(guideSectionFiles).where(eq(guideSectionFiles.guideSectionId, section.id));
+      await tx
+        .delete(guideSectionFiles)
+        .where(eq(guideSectionFiles.guideSectionId, section.id))
 
       if (row.files.length > 0) {
         await tx
           .insert(guideSectionFiles)
-          .values(row.files.map((file) => ({ ...file, guideSectionId: section.id })));
+          .values(
+            row.files.map((file) => ({ ...file, guideSectionId: section.id })),
+          )
       }
     }
 
-    return guide;
-  });
+    return guide
+  })
 }

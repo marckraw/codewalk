@@ -1,52 +1,65 @@
-import "server-only";
+import 'server-only'
 
 import {
   AgentsDaemonClient,
   AgentsDaemonClientError,
   createAgentsDaemonClient,
   type AgentsDaemonClientOptions,
-} from "@/entities/agents-daemon";
-import { getAgentsDaemonConfig, type AgentsDaemonConfigResult } from "@/entities/agents-daemon";
+} from '@/entities/agents-daemon'
+import {
+  getAgentsDaemonConfig,
+  type AgentsDaemonConfigResult,
+} from '@/entities/agents-daemon'
 import {
   finishCodeReviewGuideGeneration,
   startCodeReviewGuideGeneration,
   type FinishCodeReviewGuideGenerationInput,
-} from "@/entities/database";
-import { persistCodeReviewGuide, type CodeReviewGuide } from "@/entities/database";
-import { getPullRequestSnapshotById, type PullRequestSnapshotRow } from "@/entities/database";
-import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/shared/lib/observability";
+} from '@/entities/database'
+import {
+  persistCodeReviewGuide,
+  type CodeReviewGuide,
+} from '@/entities/database'
+import {
+  getPullRequestSnapshotById,
+  type PullRequestSnapshotRow,
+} from '@/entities/database'
+import {
+  logCodewalkError,
+  logCodewalkEvent,
+  logCodewalkWarning,
+} from '@/shared/lib/observability'
 
 export type GenerateCodeReviewGuideInput = {
-  force?: boolean;
+  force?: boolean
   onFailed?: (context: {
-    error: string;
-    generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>;
-    snapshot: PullRequestSnapshotRow;
-  }) => Promise<void>;
+    error: string
+    generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>
+    snapshot: PullRequestSnapshotRow
+  }) => Promise<void>
   onReady?: (context: {
-    generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>;
-    guide: Awaited<ReturnType<typeof persistCodeReviewGuide>>;
-    snapshot: PullRequestSnapshotRow;
-  }) => Promise<void>;
+    generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>
+    guide: Awaited<ReturnType<typeof persistCodeReviewGuide>>
+    snapshot: PullRequestSnapshotRow
+  }) => Promise<void>
   onStarted?: (context: {
-    generation: Awaited<ReturnType<typeof startCodeReviewGuideGeneration>>;
-    snapshot: PullRequestSnapshotRow;
-  }) => Promise<void>;
-  requestedByUserId: string | null;
-  snapshotId: string;
-};
+    generation: Awaited<ReturnType<typeof startCodeReviewGuideGeneration>>
+    snapshot: PullRequestSnapshotRow
+  }) => Promise<void>
+  requestedByUserId: string | null
+  snapshotId: string
+}
 
 export type GenerateCodeReviewGuideResult = {
-  generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>;
-  guide: Awaited<ReturnType<typeof persistCodeReviewGuide>>;
-};
+  generation: Awaited<ReturnType<typeof finishCodeReviewGuideGeneration>>
+  guide: Awaited<ReturnType<typeof persistCodeReviewGuide>>
+}
 
 export type CodeReviewGuideGenerationErrorCode =
-  | "configuration"
-  | "daemon"
-  | "not-found"
-  | "persistence"
-  | "unexpected";
+  | 'configuration'
+  | 'daemon'
+  | 'not-found'
+  | 'persistence'
+  | 'unexpected'
 
 export class CodeReviewGuideGenerationError extends Error {
   constructor(
@@ -55,13 +68,15 @@ export class CodeReviewGuideGenerationError extends Error {
     public readonly status: number,
     public readonly cause?: unknown,
   ) {
-    super(message);
-    this.name = "CodeReviewGuideGenerationError";
+    super(message)
+    this.name = 'CodeReviewGuideGenerationError'
   }
 }
 
-export function buildRepositoryUrlFromSnapshot(snapshot: Pick<PullRequestSnapshotRow, "owner" | "repo">) {
-  return `https://github.com/${snapshot.owner}/${snapshot.repo}`;
+export function buildRepositoryUrlFromSnapshot(
+  snapshot: Pick<PullRequestSnapshotRow, 'owner' | 'repo'>,
+) {
+  return `https://github.com/${snapshot.owner}/${snapshot.repo}`
 }
 
 export type StartCodeReviewGuideGenerationRunResult = {
@@ -71,29 +86,33 @@ export type StartCodeReviewGuideGenerationRunResult = {
    * whole generation; the run survives the client closing the page because
    * its status lives in the `code_review_guide_generations` row.
    */
-  complete: () => Promise<GenerateCodeReviewGuideResult>;
-  generation: Awaited<ReturnType<typeof startCodeReviewGuideGeneration>>;
-  snapshot: PullRequestSnapshotRow;
-};
+  complete: () => Promise<GenerateCodeReviewGuideResult>
+  generation: Awaited<ReturnType<typeof startCodeReviewGuideGeneration>>
+  snapshot: PullRequestSnapshotRow
+}
 
 export async function generateAndPersistCodeReviewGuide(
   input: GenerateCodeReviewGuideInput,
 ): Promise<GenerateCodeReviewGuideResult> {
-  const run = await startCodeReviewGuideGenerationRun(input);
+  const run = await startCodeReviewGuideGenerationRun(input)
 
-  return run.complete();
+  return run.complete()
 }
 
 export async function startCodeReviewGuideGenerationRun(
   input: GenerateCodeReviewGuideInput,
 ): Promise<StartCodeReviewGuideGenerationRunResult> {
-  const snapshot = await getPullRequestSnapshotById(input.snapshotId);
+  const snapshot = await getPullRequestSnapshotById(input.snapshotId)
 
   if (!snapshot) {
-    throw new CodeReviewGuideGenerationError("not-found", "Pull request snapshot was not found.", 404);
+    throw new CodeReviewGuideGenerationError(
+      'not-found',
+      'Pull request snapshot was not found.',
+      404,
+    )
   }
 
-  const config = getAgentsDaemonConfig();
+  const config = getAgentsDaemonConfig()
 
   const startedGeneration = await startCodeReviewGuideGeneration({
     effort: config.ok ? config.config.defaultEffort : null,
@@ -102,8 +121,8 @@ export async function startCodeReviewGuideGenerationRun(
     provider: config.ok ? config.config.defaultProvider : null,
     requestedByUserId: input.requestedByUserId,
     snapshotId: input.snapshotId,
-  });
-  logCodewalkEvent("codewalk.guide_generation.started", {
+  })
+  logCodewalkEvent('codewalk.guide_generation.started', {
     force: input.force ?? false,
     generationId: startedGeneration.id,
     owner: snapshot.owner,
@@ -111,28 +130,45 @@ export async function startCodeReviewGuideGenerationRun(
     repo: snapshot.repo,
     requestedByUser: Boolean(input.requestedByUserId),
     snapshotId: snapshot.id,
-  });
-  await input.onStarted?.({ generation: startedGeneration, snapshot });
+  })
+  await input.onStarted?.({ generation: startedGeneration, snapshot })
 
   if (!config.ok) {
-    const failedGeneration = await markGenerationFailed(input.snapshotId, config.message);
-    logCodewalkWarning("codewalk.guide_generation.configuration_failed", {
+    const failedGeneration = await markGenerationFailed(
+      input.snapshotId,
+      config.message,
+    )
+    logCodewalkWarning('codewalk.guide_generation.configuration_failed', {
       generationId: failedGeneration.id,
       owner: snapshot.owner,
       pullRequestNumber: snapshot.number,
       repo: snapshot.repo,
       snapshotId: snapshot.id,
       state: config.state,
-    });
-    await input.onFailed?.({ error: config.message, generation: failedGeneration, snapshot });
-    throw new CodeReviewGuideGenerationError("configuration", config.message, 503);
+    })
+    await input.onFailed?.({
+      error: config.message,
+      generation: failedGeneration,
+      snapshot,
+    })
+    throw new CodeReviewGuideGenerationError(
+      'configuration',
+      config.message,
+      503,
+    )
   }
 
   return {
-    complete: () => completeCodeReviewGuideGeneration(input, snapshot, config, startedGeneration.id),
+    complete: () =>
+      completeCodeReviewGuideGeneration(
+        input,
+        snapshot,
+        config,
+        startedGeneration.id,
+      ),
     generation: startedGeneration,
     snapshot,
-  };
+  }
 }
 
 async function completeCodeReviewGuideGeneration(
@@ -142,7 +178,7 @@ async function completeCodeReviewGuideGeneration(
   generationId: string,
 ): Promise<GenerateCodeReviewGuideResult> {
   try {
-    logCodewalkEvent("codewalk.guide_generation.daemon_request_started", {
+    logCodewalkEvent('codewalk.guide_generation.daemon_request_started', {
       generationId,
       model: config.config.defaultModel,
       owner: snapshot.owner,
@@ -151,8 +187,8 @@ async function completeCodeReviewGuideGeneration(
       repo: snapshot.repo,
       requestTimeoutMs: config.config.requestTimeoutMs,
       snapshotId: snapshot.id,
-    });
-    const client = createClient(config);
+    })
+    const client = createClient(config)
     const result = await client.generateCodeReviewGuide({
       effort: config.config.defaultEffort,
       force: input.force,
@@ -160,33 +196,36 @@ async function completeCodeReviewGuideGeneration(
       provider: config.config.defaultProvider,
       pullRequestNumber: snapshot.number,
       repository: buildRepositoryUrlFromSnapshot(snapshot),
-    });
-    const daemonGuide: CodeReviewGuide = result.guide;
+    })
+    const daemonGuide: CodeReviewGuide = result.guide
     const guide = await persistCodeReviewGuide({
       guide: daemonGuide,
       snapshotId: snapshot.id,
-    });
+    })
     const generation = await finishCodeReviewGuideGeneration({
       error: null,
       guideId: guide.id,
       snapshotId: snapshot.id,
-      status: "ready",
-    });
-    logCodewalkEvent("codewalk.guide_generation.ready", {
+      status: 'ready',
+    })
+    logCodewalkEvent('codewalk.guide_generation.ready', {
       generationId: generation.id,
       guideId: guide.id,
       owner: snapshot.owner,
       pullRequestNumber: snapshot.number,
       repo: snapshot.repo,
       snapshotId: snapshot.id,
-    });
-    await input.onReady?.({ generation, guide, snapshot });
+    })
+    await input.onReady?.({ generation, guide, snapshot })
 
-    return { generation, guide };
+    return { generation, guide }
   } catch (error) {
-    const message = safeGenerationErrorMessage(error);
-    const failedGeneration = await markGenerationFailed(input.snapshotId, message);
-    logCodewalkError("codewalk.guide_generation.failed", {
+    const message = safeGenerationErrorMessage(error)
+    const failedGeneration = await markGenerationFailed(
+      input.snapshotId,
+      message,
+    )
+    logCodewalkError('codewalk.guide_generation.failed', {
       error,
       generationId: failedGeneration.id,
       message,
@@ -194,23 +233,35 @@ async function completeCodeReviewGuideGeneration(
       pullRequestNumber: snapshot.number,
       repo: snapshot.repo,
       snapshotId: snapshot.id,
-    });
-    await input.onFailed?.({ error: message, generation: failedGeneration, snapshot });
+    })
+    await input.onFailed?.({
+      error: message,
+      generation: failedGeneration,
+      snapshot,
+    })
 
     if (error instanceof AgentsDaemonClientError) {
-      throw new CodeReviewGuideGenerationError("daemon", message, statusForDaemonError(error), error);
+      throw new CodeReviewGuideGenerationError(
+        'daemon',
+        message,
+        statusForDaemonError(error),
+        error,
+      )
     }
 
-    throw new CodeReviewGuideGenerationError("unexpected", message, 500, error);
+    throw new CodeReviewGuideGenerationError('unexpected', message, 500, error)
   }
 }
 
-function createClient(config: Extract<AgentsDaemonConfigResult, { ok: true }>, options?: Partial<AgentsDaemonClientOptions>) {
+function createClient(
+  config: Extract<AgentsDaemonConfigResult, { ok: true }>,
+  options?: Partial<AgentsDaemonClientOptions>,
+) {
   if (options) {
-    return new AgentsDaemonClient({ ...config.config, ...options });
+    return new AgentsDaemonClient({ ...config.config, ...options })
   }
 
-  return createAgentsDaemonClient(config);
+  return createAgentsDaemonClient(config)
 }
 
 async function markGenerationFailed(snapshotId: string, error: string) {
@@ -218,27 +269,32 @@ async function markGenerationFailed(snapshotId: string, error: string) {
     error,
     guideId: null,
     snapshotId,
-    status: "failed",
-  };
+    status: 'failed',
+  }
 
-  return finishCodeReviewGuideGeneration(input);
+  return finishCodeReviewGuideGeneration(input)
 }
 
 function safeGenerationErrorMessage(error: unknown) {
   if (error instanceof AgentsDaemonClientError) {
-    return error.message;
+    return error.message
   }
 
   if (error instanceof Error && error.message.trim()) {
-    return error.message;
+    return error.message
   }
 
-  return "Guide generation failed.";
+  return 'Guide generation failed.'
 }
 
 function statusForDaemonError(error: AgentsDaemonClientError) {
-  if (error.code === "network-error") return 503;
-  if (error.code === "invalid-response") return 502;
-  if (error.details.status && error.details.status >= 400 && error.details.status < 500) return error.details.status;
-  return 502;
+  if (error.code === 'network-error') return 503
+  if (error.code === 'invalid-response') return 502
+  if (
+    error.details.status &&
+    error.details.status >= 400 &&
+    error.details.status < 500
+  )
+    return error.details.status
+  return 502
 }

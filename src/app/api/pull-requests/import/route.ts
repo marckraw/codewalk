@@ -1,58 +1,73 @@
-import { NextResponse } from "next/server";
-import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { NextResponse } from 'next/server'
+import { getCurrentCodewalkUser } from '@/entities/auth-server'
 import {
   listRepositoryReviewRules,
   persistPullRequestSnapshot,
   upsertAuthenticatedUser,
-} from "@/entities/database";
-import { evaluateRepositoryReviewAccess, parseGitHubPullRequestUrl } from "@/entities/github";
+} from '@/entities/database'
+import {
+  evaluateRepositoryReviewAccess,
+  parseGitHubPullRequestUrl,
+} from '@/entities/github'
 import {
   createServerGitHubRestClient,
   getGitHubAutomationConfig,
   GitHubClientError,
-} from "@/entities/github-server";
+} from '@/entities/github-server'
 
 export async function POST(request: Request) {
-  let body: unknown;
+  let body: unknown
 
   try {
-    body = await request.json();
+    body = await request.json()
   } catch {
-    return NextResponse.json({ error: "Request body must be JSON." }, { status: 400 });
+    return NextResponse.json(
+      { error: 'Request body must be JSON.' },
+      { status: 400 },
+    )
   }
 
-  const url = typeof body === "object" && body && "url" in body ? body.url : null;
+  const url =
+    typeof body === 'object' && body && 'url' in body ? body.url : null
 
-  if (typeof url !== "string") {
-    return NextResponse.json({ error: "A pull request URL is required." }, { status: 400 });
+  if (typeof url !== 'string') {
+    return NextResponse.json(
+      { error: 'A pull request URL is required.' },
+      { status: 400 },
+    )
   }
 
-  const parsed = parseGitHubPullRequestUrl(url);
+  const parsed = parseGitHubPullRequestUrl(url)
 
   if (!parsed.ok) {
-    return NextResponse.json({ error: parsed.error }, { status: 400 });
+    return NextResponse.json({ error: parsed.error }, { status: 400 })
   }
 
-  const currentUser = await getCurrentCodewalkUser();
+  const currentUser = await getCurrentCodewalkUser()
 
-  if (currentUser.status === "misconfigured") {
+  if (currentUser.status === 'misconfigured') {
     return NextResponse.json(
-      { error: `Clerk is not configured. Missing: ${currentUser.missingKeys.join(", ")}.` },
+      {
+        error: `Clerk is not configured. Missing: ${currentUser.missingKeys.join(', ')}.`,
+      },
       { status: 503 },
-    );
+    )
   }
 
-  if (currentUser.status === "signed-out") {
-    return NextResponse.json({ error: "Sign in with GitHub before importing a pull request." }, { status: 401 });
+  if (currentUser.status === 'signed-out') {
+    return NextResponse.json(
+      { error: 'Sign in with GitHub before importing a pull request.' },
+      { status: 401 },
+    )
   }
 
-  const githubConfig = getGitHubAutomationConfig();
+  const githubConfig = getGitHubAutomationConfig()
 
   if (!githubConfig.ok) {
     return NextResponse.json(
       { error: githubConfig.message, missingKeys: githubConfig.missingKeys },
       { status: 503 },
-    );
+    )
   }
 
   try {
@@ -61,27 +76,27 @@ export async function POST(request: Request) {
       owner: parsed.pullRequest.owner,
       repo: parsed.pullRequest.repo,
       rules: await listRepositoryReviewRules(),
-    });
+    })
 
     if (!access.allowed) {
       const error =
-        access.reason === "blocklisted"
+        access.reason === 'blocklisted'
           ? `Guided reviews are blocked for ${parsed.pullRequest.owner}/${parsed.pullRequest.repo}. Remove the block rule in Settings to import it.`
-          : `Codewalk only imports pull requests from ${githubConfig.allowedOwner} or whitelisted repositories. Add ${parsed.pullRequest.owner}/${parsed.pullRequest.repo} in Settings first.`;
-      return NextResponse.json({ error }, { status: 403 });
+          : `Codewalk only imports pull requests from ${githubConfig.allowedOwner} or whitelisted repositories. Add ${parsed.pullRequest.owner}/${parsed.pullRequest.repo} in Settings first.`
+      return NextResponse.json({ error }, { status: 403 })
     }
 
     const user = await upsertAuthenticatedUser({
       clerkUserId: currentUser.userId,
       email: currentUser.email,
       name: currentUser.name,
-    });
-    const github = createServerGitHubRestClient(githubConfig.botToken);
-    const snapshot = await github.getPullRequestSnapshot(parsed.pullRequest);
+    })
+    const github = createServerGitHubRestClient(githubConfig.botToken)
+    const snapshot = await github.getPullRequestSnapshot(parsed.pullRequest)
     const persistedSnapshot = await persistPullRequestSnapshot({
       importedByUserId: user.id,
       snapshot,
-    });
+    })
 
     return NextResponse.json({
       counts: {
@@ -97,48 +112,52 @@ export async function POST(request: Request) {
         owner: persistedSnapshot.owner,
         repo: persistedSnapshot.repo,
       },
-      status: "imported",
-    });
+      status: 'imported',
+    })
   } catch (error) {
     if (error instanceof GitHubClientError) {
-      return NextResponse.json({ code: error.code, error: error.message }, { status: statusForGitHubError(error) });
+      return NextResponse.json(
+        { code: error.code, error: error.message },
+        { status: statusForGitHubError(error) },
+      )
     }
 
-    if (error instanceof Error && error.message.includes("DATABASE_URL")) {
-      return NextResponse.json({ error: error.message }, { status: 503 });
+    if (error instanceof Error && error.message.includes('DATABASE_URL')) {
+      return NextResponse.json({ error: error.message }, { status: 503 })
     }
 
-    console.error("[codewalk-import-failed]", {
+    console.error('[codewalk-import-failed]', {
       error: error instanceof Error ? error.message : String(error),
       pullRequest: parsed.pullRequest,
-    });
+    })
 
     return NextResponse.json(
       {
-        code: "import_failed",
-        error: "Pull request import failed unexpectedly. Check Vercel function logs for [codewalk-import-failed].",
+        code: 'import_failed',
+        error:
+          'Pull request import failed unexpectedly. Check Vercel function logs for [codewalk-import-failed].',
       },
       { status: 500 },
-    );
+    )
   }
 }
 
 function statusForGitHubError(error: GitHubClientError) {
-  if (error.code === "missing_auth") {
-    return 401;
+  if (error.code === 'missing_auth') {
+    return 401
   }
 
-  if (error.code === "missing_scope") {
-    return 403;
+  if (error.code === 'missing_scope') {
+    return 403
   }
 
-  if (error.code === "not_found") {
-    return 404;
+  if (error.code === 'not_found') {
+    return 404
   }
 
-  if (error.code === "rate_limited") {
-    return 429;
+  if (error.code === 'rate_limited') {
+    return 429
   }
 
-  return 502;
+  return 502
 }

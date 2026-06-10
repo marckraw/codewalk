@@ -1,18 +1,18 @@
-"use client";
+'use client'
 
-import { FileCode2 } from "lucide-react";
-import type { ReviewFile } from "./review-types";
-import { ChangedFilesTree } from "./changed-files-tree";
-import { StatusFilterButton } from "./status-filter-button";
+import { FileCode2 } from 'lucide-react'
+import type { ReviewFile } from './review-types'
+import { ChangedFilesTree } from './changed-files-tree'
+import { StatusFilterButton } from './status-filter-button'
 
 interface FileRailProps {
-  files: ReviewFile[];
-  onSelectFile: (file: string) => void;
-  onStatusFilterChange: (status: string) => void;
-  selectedFile: string | null;
-  statusCounts: Record<string, number>;
-  statusFilter: string;
-  visibleFiles: ReviewFile[];
+  files: ReviewFile[]
+  onSelectFile: (file: string) => void
+  onStatusFilterChange: (status: string) => void
+  selectedFile: string | null
+  statusCounts: Record<string, number>
+  statusFilter: string
+  visibleFiles: ReviewFile[]
 }
 
 export function FileRail({
@@ -24,7 +24,7 @@ export function FileRail({
   statusFilter,
   visibleFiles,
 }: FileRailProps) {
-  const statuses = Object.keys(statusCounts).sort();
+  const statuses = Object.keys(statusCounts).sort()
 
   return (
     <aside className="flex min-h-0 flex-col border-b border-border lg:border-r lg:border-b-0">
@@ -37,7 +37,12 @@ export function FileRail({
       </div>
 
       <div className="flex shrink-0 flex-wrap gap-1 border-b border-border px-2 py-2">
-        <StatusFilterButton active={statusFilter === "all"} count={files.length} label="All" onClick={() => onStatusFilterChange("all")} />
+        <StatusFilterButton
+          active={statusFilter === 'all'}
+          count={files.length}
+          label="All"
+          onClick={() => onStatusFilterChange('all')}
+        />
         {statuses.map((status) => (
           <StatusFilterButton
             key={status}
@@ -51,11 +56,18 @@ export function FileRail({
 
       <ChangedFilesTree
         className="p-2"
-        emptyMessage={statusFilter === "all" ? "No changed files detected" : `No ${statusFilter} files detected`}
-        files={visibleFiles.map((file) => ({ file: file.path, status: file.status }))}
+        emptyMessage={
+          statusFilter === 'all'
+            ? 'No changed files detected'
+            : `No ${statusFilter} files detected`
+        }
+        files={visibleFiles.map((file) => ({
+          file: file.path,
+          status: file.status,
+        }))}
         onSelectFile={onSelectFile}
         selectedFile={selectedFile}
       />
     </aside>
-  );
+  )
 }

@@ -1,1 +1,1 @@
-export { CodeReviewGuideGenerationControl } from "./code-review-guide-generation-control";
+export { CodeReviewGuideGenerationControl } from './code-review-guide-generation-control'

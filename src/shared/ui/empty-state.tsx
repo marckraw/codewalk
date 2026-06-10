@@ -1,18 +1,23 @@
-import type { ReactNode } from "react";
-import { cn } from "@/shared/lib/cn.pure";
+import type { ReactNode } from 'react'
+import { cn } from '@/shared/lib/cn.pure'
 
 type EmptyStateProps = {
-  action?: ReactNode;
-  className?: string;
-  description: string;
-  title: string;
-};
+  action?: ReactNode
+  className?: string
+  description: string
+  title: string
+}
 
-export function EmptyState({ action, className, description, title }: EmptyStateProps) {
+export function EmptyState({
+  action,
+  className,
+  description,
+  title,
+}: EmptyStateProps) {
   return (
     <div
       className={cn(
-        "grid min-h-32 place-items-center rounded-md border border-dashed border-[var(--border)] bg-[var(--panel-subtle)] p-4 text-center",
+        'grid min-h-32 place-items-center rounded-md border border-dashed border-[var(--border)] bg-[var(--panel-subtle)] p-4 text-center',
         className,
       )}
     >
@@ -24,5 +29,5 @@ export function EmptyState({ action, className, description, title }: EmptyState
         {action}
       </div>
     </div>
-  );
+  )
 }

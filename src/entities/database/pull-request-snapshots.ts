@@ -1,25 +1,30 @@
-import "server-only";
+import 'server-only'
 
-import { and, desc, eq } from "drizzle-orm";
-import type { GitHubPullRequestRef, NormalizedPullRequestSnapshot } from "@/entities/github";
-import { getDb } from "./client";
+import { and, desc, eq } from 'drizzle-orm'
+import type {
+  GitHubPullRequestRef,
+  NormalizedPullRequestSnapshot,
+} from '@/entities/github'
+import { getDb } from './client'
 import {
   pullRequestComments,
   pullRequestCommits,
   pullRequestFiles,
   pullRequestSnapshots,
-} from "./schema";
+} from './schema'
 
 export type PersistPullRequestSnapshotInput = {
-  importedByUserId: string | null;
-  snapshot: NormalizedPullRequestSnapshot;
-};
+  importedByUserId: string | null
+  snapshot: NormalizedPullRequestSnapshot
+}
 
-export type PullRequestSnapshotRow = typeof pullRequestSnapshots.$inferSelect;
+export type PullRequestSnapshotRow = typeof pullRequestSnapshots.$inferSelect
 
-export function buildPullRequestSnapshotRows(input: PersistPullRequestSnapshotInput) {
-  const { importedByUserId, snapshot } = input;
-  const { pullRequest } = snapshot;
+export function buildPullRequestSnapshotRows(
+  input: PersistPullRequestSnapshotInput,
+) {
+  const { importedByUserId, snapshot } = input
+  const { pullRequest } = snapshot
 
   return {
     comments: snapshot.comments.map((comment) => ({
@@ -67,12 +72,14 @@ export function buildPullRequestSnapshotRows(input: PersistPullRequestSnapshotIn
       updatedAt: new Date(),
       url: pullRequest.url,
     },
-  };
+  }
 }
 
-export async function persistPullRequestSnapshot(input: PersistPullRequestSnapshotInput) {
-  const db = getDb();
-  const rows = buildPullRequestSnapshotRows(input);
+export async function persistPullRequestSnapshot(
+  input: PersistPullRequestSnapshotInput,
+) {
+  const db = getDb()
+  const rows = buildPullRequestSnapshotRows(input)
 
   return db.transaction(async (tx) => {
     const [snapshot] = await tx
@@ -101,28 +108,42 @@ export async function persistPullRequestSnapshot(input: PersistPullRequestSnapsh
           pullRequestSnapshots.headSha,
         ],
       })
-      .returning();
+      .returning()
 
-    await tx.delete(pullRequestFiles).where(eq(pullRequestFiles.snapshotId, snapshot.id));
-    await tx.delete(pullRequestCommits).where(eq(pullRequestCommits.snapshotId, snapshot.id));
-    await tx.delete(pullRequestComments).where(eq(pullRequestComments.snapshotId, snapshot.id));
+    await tx
+      .delete(pullRequestFiles)
+      .where(eq(pullRequestFiles.snapshotId, snapshot.id))
+    await tx
+      .delete(pullRequestCommits)
+      .where(eq(pullRequestCommits.snapshotId, snapshot.id))
+    await tx
+      .delete(pullRequestComments)
+      .where(eq(pullRequestComments.snapshotId, snapshot.id))
 
     if (rows.files.length > 0) {
       await tx
         .insert(pullRequestFiles)
-        .values(rows.files.map((file) => ({ ...file, snapshotId: snapshot.id })));
+        .values(
+          rows.files.map((file) => ({ ...file, snapshotId: snapshot.id })),
+        )
     }
 
     if (rows.commits.length > 0) {
-      await tx
-        .insert(pullRequestCommits)
-        .values(rows.commits.map((commit) => ({ ...commit, snapshotId: snapshot.id })));
+      await tx.insert(pullRequestCommits).values(
+        rows.commits.map((commit) => ({
+          ...commit,
+          snapshotId: snapshot.id,
+        })),
+      )
     }
 
     if (rows.comments.length > 0) {
-      await tx
-        .insert(pullRequestComments)
-        .values(rows.comments.map((comment) => ({ ...comment, snapshotId: snapshot.id })));
+      await tx.insert(pullRequestComments).values(
+        rows.comments.map((comment) => ({
+          ...comment,
+          snapshotId: snapshot.id,
+        })),
+      )
     }
 
     await tx
@@ -140,23 +161,29 @@ export async function persistPullRequestSnapshot(input: PersistPullRequestSnapsh
           eq(pullRequestSnapshots.repo, rows.snapshot.repo),
           eq(pullRequestSnapshots.number, rows.snapshot.number),
         ),
-      );
+      )
 
-    return snapshot;
-  });
+    return snapshot
+  })
 }
 
-export async function getPullRequestSnapshotById(snapshotId: string): Promise<PullRequestSnapshotRow | null> {
-  const db = getDb();
-  const [snapshot] = await db.select().from(pullRequestSnapshots).where(eq(pullRequestSnapshots.id, snapshotId)).limit(1);
+export async function getPullRequestSnapshotById(
+  snapshotId: string,
+): Promise<PullRequestSnapshotRow | null> {
+  const db = getDb()
+  const [snapshot] = await db
+    .select()
+    .from(pullRequestSnapshots)
+    .where(eq(pullRequestSnapshots.id, snapshotId))
+    .limit(1)
 
-  return snapshot ?? null;
+  return snapshot ?? null
 }
 
 export async function getLatestPullRequestSnapshotByRef(
   ref: GitHubPullRequestRef,
 ): Promise<PullRequestSnapshotRow | null> {
-  const db = getDb();
+  const db = getDb()
   const [snapshot] = await db
     .select()
     .from(pullRequestSnapshots)
@@ -167,8 +194,11 @@ export async function getLatestPullRequestSnapshotByRef(
         eq(pullRequestSnapshots.number, ref.number),
       ),
     )
-    .orderBy(desc(pullRequestSnapshots.updatedAt), desc(pullRequestSnapshots.importedAt))
-    .limit(1);
+    .orderBy(
+      desc(pullRequestSnapshots.updatedAt),
+      desc(pullRequestSnapshots.importedAt),
+    )
+    .limit(1)
 
-  return snapshot ?? null;
+  return snapshot ?? null
 }

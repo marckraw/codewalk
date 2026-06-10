@@ -1,9 +1,11 @@
-import type { ReviewWorkspaceState } from "@/entities/database";
+import type { ReviewWorkspaceState } from '@/entities/database'
 
-export const REVIEW_WORKSPACE_POLL_INTERVAL_MS = 2500;
+export const REVIEW_WORKSPACE_POLL_INTERVAL_MS = 2500
 
-export function isTerminalReviewWorkspaceState(state: ReviewWorkspaceState): boolean {
-  return state === "ready" || state === "failed";
+export function isTerminalReviewWorkspaceState(
+  state: ReviewWorkspaceState,
+): boolean {
+  return state === 'ready' || state === 'failed'
 }
 
 /**
@@ -13,10 +15,13 @@ export function isTerminalReviewWorkspaceState(state: ReviewWorkspaceState): boo
  * request has been kicked off locally but the server has not yet reported a
  * terminal state. It always stops once the workspace reaches `ready`/`failed`.
  */
-export function shouldPollReviewWorkspace(state: ReviewWorkspaceState, pending: boolean): boolean {
+export function shouldPollReviewWorkspace(
+  state: ReviewWorkspaceState,
+  pending: boolean,
+): boolean {
   if (isTerminalReviewWorkspaceState(state)) {
-    return false;
+    return false
   }
 
-  return state === "preparing" || pending;
+  return state === 'preparing' || pending
 }

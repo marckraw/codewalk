@@ -1,5 +1,5 @@
-export { getCurrentCodewalkUser } from "./server";
+export { getCurrentCodewalkUser } from './server'
 export {
   getMissingClerkEnvironmentKeys,
   isClerkServerConfigured,
-} from "./server-config";
+} from './server-config'

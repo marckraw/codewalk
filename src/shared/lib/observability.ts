@@ -1,24 +1,28 @@
-type LogFields = Record<string, unknown>;
+type LogFields = Record<string, unknown>
 
 export function logCodewalkEvent(event: string, fields: LogFields = {}) {
-  console.info(JSON.stringify(buildLogRecord("info", event, fields)));
+  console.info(JSON.stringify(buildLogRecord('info', event, fields)))
 }
 
 export function logCodewalkWarning(event: string, fields: LogFields = {}) {
-  console.warn(JSON.stringify(buildLogRecord("warn", event, fields)));
+  console.warn(JSON.stringify(buildLogRecord('warn', event, fields)))
 }
 
 export function logCodewalkError(event: string, fields: LogFields = {}) {
-  console.error(JSON.stringify(buildLogRecord("error", event, fields)));
+  console.error(JSON.stringify(buildLogRecord('error', event, fields)))
 }
 
-function buildLogRecord(level: "error" | "info" | "warn", event: string, fields: LogFields) {
+function buildLogRecord(
+  level: 'error' | 'info' | 'warn',
+  event: string,
+  fields: LogFields,
+) {
   return {
     event,
     level,
     timestamp: new Date().toISOString(),
     ...normalizeFields(fields),
-  };
+  }
 }
 
 function normalizeFields(fields: LogFields): LogFields {
@@ -26,7 +30,7 @@ function normalizeFields(fields: LogFields): LogFields {
     Object.entries(fields)
       .filter(([, value]) => value !== undefined)
       .map(([key, value]) => [key, normalizeValue(value)]),
-  );
+  )
 }
 
 function normalizeValue(value: unknown): unknown {
@@ -34,8 +38,8 @@ function normalizeValue(value: unknown): unknown {
     return {
       message: value.message,
       name: value.name,
-    };
+    }
   }
 
-  return value;
+  return value
 }

@@ -1,17 +1,17 @@
-import "server-only";
+import 'server-only'
 
-import { eq } from "drizzle-orm";
-import { getDb } from "./client";
-import { users } from "./schema";
+import { eq } from 'drizzle-orm'
+import { getDb } from './client'
+import { users } from './schema'
 
 export type AuthenticatedUserInput = {
-  clerkUserId: string;
-  email: string | null;
-  name: string | null;
-};
+  clerkUserId: string
+  email: string | null
+  name: string | null
+}
 
 export async function upsertAuthenticatedUser(input: AuthenticatedUserInput) {
-  const db = getDb();
+  const db = getDb()
   const [user] = await db
     .insert(users)
     .values({
@@ -27,14 +27,18 @@ export async function upsertAuthenticatedUser(input: AuthenticatedUserInput) {
       },
       target: users.clerkUserId,
     })
-    .returning();
+    .returning()
 
-  return user;
+  return user
 }
 
 export async function getUserByClerkId(clerkUserId: string) {
-  const db = getDb();
-  const [user] = await db.select().from(users).where(eq(users.clerkUserId, clerkUserId)).limit(1);
+  const db = getDb()
+  const [user] = await db
+    .select()
+    .from(users)
+    .where(eq(users.clerkUserId, clerkUserId))
+    .limit(1)
 
-  return user ?? null;
+  return user ?? null
 }

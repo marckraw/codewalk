@@ -3,17 +3,17 @@ export function resolvePositiveIntegerEnv(
   key: string,
   defaultValue: number,
 ) {
-  const rawValue = env[key]?.trim();
+  const rawValue = env[key]?.trim()
 
   if (!rawValue) {
-    return defaultValue;
+    return defaultValue
   }
 
-  const value = Number(rawValue);
+  const value = Number(rawValue)
 
   if (!Number.isInteger(value) || value <= 0) {
-    return defaultValue;
+    return defaultValue
   }
 
-  return value;
+  return value
 }

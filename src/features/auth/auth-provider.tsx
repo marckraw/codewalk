@@ -1,16 +1,19 @@
-"use client";
+'use client'
 
-import { ClerkProvider } from "@clerk/nextjs";
-import type { ReactNode } from "react";
-import { AUTHENTICATED_HOME_PATH, isClerkClientConfigured } from "@/entities/auth";
+import { ClerkProvider } from '@clerk/nextjs'
+import type { ReactNode } from 'react'
+import {
+  AUTHENTICATED_HOME_PATH,
+  isClerkClientConfigured,
+} from '@/entities/auth'
 
 type AuthProviderProps = {
-  children: ReactNode;
-};
+  children: ReactNode
+}
 
 export function AuthProvider({ children }: AuthProviderProps) {
   if (!isClerkClientConfigured()) {
-    return children;
+    return children
   }
 
   return (
@@ -20,5 +23,5 @@ export function AuthProvider({ children }: AuthProviderProps) {
     >
       {children}
     </ClerkProvider>
-  );
+  )
 }

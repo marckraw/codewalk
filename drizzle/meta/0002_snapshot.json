@@ -143,12 +143,8 @@
           "name": "code_review_guide_generations_snapshot_id_pull_request_snapshots_id_fk",
           "tableFrom": "code_review_guide_generations",
           "tableTo": "pull_request_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -156,12 +152,8 @@
           "name": "code_review_guide_generations_requested_by_user_id_users_id_fk",
           "tableFrom": "code_review_guide_generations",
           "tableTo": "users",
-          "columnsFrom": [
-            "requested_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["requested_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -169,12 +161,8 @@
           "name": "code_review_guide_generations_guide_id_guides_id_fk",
           "tableFrom": "code_review_guide_generations",
           "tableTo": "guides",
-          "columnsFrom": [
-            "guide_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["guide_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -289,12 +277,8 @@
           "name": "guide_section_files_guide_section_id_guide_sections_id_fk",
           "tableFrom": "guide_section_files",
           "tableTo": "guide_sections",
-          "columnsFrom": [
-            "guide_section_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["guide_section_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -428,12 +412,8 @@
           "name": "guide_sections_guide_id_guides_id_fk",
           "tableFrom": "guide_sections",
           "tableTo": "guides",
-          "columnsFrom": [
-            "guide_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["guide_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -653,12 +633,8 @@
           "name": "guides_snapshot_id_pull_request_snapshots_id_fk",
           "tableFrom": "guides",
           "tableTo": "pull_request_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -778,12 +754,8 @@
           "name": "pull_request_comments_snapshot_id_pull_request_snapshots_id_fk",
           "tableFrom": "pull_request_comments",
           "tableTo": "pull_request_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -877,12 +849,8 @@
           "name": "pull_request_commits_snapshot_id_pull_request_snapshots_id_fk",
           "tableFrom": "pull_request_commits",
           "tableTo": "pull_request_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1013,12 +981,8 @@
           "name": "pull_request_files_snapshot_id_pull_request_snapshots_id_fk",
           "tableFrom": "pull_request_files",
           "tableTo": "pull_request_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1189,12 +1153,8 @@
           "name": "pull_request_snapshots_imported_by_user_id_users_id_fk",
           "tableFrom": "pull_request_snapshots",
           "tableTo": "users",
-          "columnsFrom": [
-            "imported_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["imported_by_user_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1315,12 +1275,8 @@
           "name": "review_notes_snapshot_id_pull_request_snapshots_id_fk",
           "tableFrom": "review_notes",
           "tableTo": "pull_request_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1328,12 +1284,8 @@
           "name": "review_notes_user_id_users_id_fk",
           "tableFrom": "review_notes",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1341,12 +1293,8 @@
           "name": "review_notes_guide_section_id_guide_sections_id_fk",
           "tableFrom": "review_notes",
           "tableTo": "guide_sections",
-          "columnsFrom": [
-            "guide_section_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["guide_section_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1448,12 +1396,8 @@
           "name": "review_progress_snapshot_id_pull_request_snapshots_id_fk",
           "tableFrom": "review_progress",
           "tableTo": "pull_request_snapshots",
-          "columnsFrom": [
-            "snapshot_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["snapshot_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1461,12 +1405,8 @@
           "name": "review_progress_user_id_users_id_fk",
           "tableFrom": "review_progress",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1550,81 +1490,47 @@
     "public.code_review_guide_generation_status": {
       "name": "code_review_guide_generation_status",
       "schema": "public",
-      "values": [
-        "running",
-        "ready",
-        "failed"
-      ]
+      "values": ["running", "ready", "failed"]
     },
     "public.code_review_guide_generator": {
       "name": "code_review_guide_generator",
       "schema": "public",
-      "values": [
-        "deterministic",
-        "agent"
-      ]
+      "values": ["deterministic", "agent"]
     },
     "public.code_review_guide_mode": {
       "name": "code_review_guide_mode",
       "schema": "public",
-      "values": [
-        "pull-request"
-      ]
+      "values": ["pull-request"]
     },
     "public.code_review_guide_provider": {
       "name": "code_review_guide_provider",
       "schema": "public",
-      "values": [
-        "claude",
-        "codex",
-        "cursor",
-        "gemini"
-      ]
+      "values": ["claude", "codex", "cursor", "gemini"]
     },
     "public.code_review_guide_status": {
       "name": "code_review_guide_status",
       "schema": "public",
-      "values": [
-        "ready",
-        "failed"
-      ]
+      "values": ["ready", "failed"]
     },
     "public.guide_risk_level": {
       "name": "guide_risk_level",
       "schema": "public",
-      "values": [
-        "low",
-        "medium",
-        "high"
-      ]
+      "values": ["low", "medium", "high"]
     },
     "public.note_anchor_type": {
       "name": "note_anchor_type",
       "schema": "public",
-      "values": [
-        "guide_section",
-        "file",
-        "diff_range"
-      ]
+      "values": ["guide_section", "file", "diff_range"]
     },
     "public.pull_request_file_status": {
       "name": "pull_request_file_status",
       "schema": "public",
-      "values": [
-        "added",
-        "modified",
-        "removed",
-        "renamed",
-        "changed"
-      ]
+      "values": ["added", "modified", "removed", "renamed", "changed"]
     },
     "public.review_progress_target_type": {
       "name": "review_progress_target_type",
       "schema": "public",
-      "values": [
-        "guide_section",
-        "file"
-      ]
+      "values": ["guide_section", "file"]
     }
   },
   "schemas": {},

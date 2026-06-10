@@ -1,21 +1,24 @@
-"use client";
+'use client'
 
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore } from 'react'
 
-export type AppColorScheme = "light" | "dark";
+export type AppColorScheme = 'light' | 'dark'
 
 function subscribe(onChange: () => void) {
-  if (typeof document === "undefined") {
-    return () => {};
+  if (typeof document === 'undefined') {
+    return () => {}
   }
 
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributeFilter: ["class"], attributes: true });
-  return () => observer.disconnect();
+  const observer = new MutationObserver(onChange)
+  observer.observe(document.documentElement, {
+    attributeFilter: ['class'],
+    attributes: true,
+  })
+  return () => observer.disconnect()
 }
 
 function getSnapshot(): AppColorScheme {
-  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+  return document.documentElement.classList.contains('dark') ? 'dark' : 'light'
 }
 
 /**
@@ -26,5 +29,5 @@ function getSnapshot(): AppColorScheme {
  * Reading it here lets callers pass an explicit theme so Pierre matches the app.
  */
 export function useAppColorScheme(): AppColorScheme {
-  return useSyncExternalStore(subscribe, getSnapshot, () => "light");
+  return useSyncExternalStore(subscribe, getSnapshot, () => 'light')
 }

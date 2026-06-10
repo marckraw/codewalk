@@ -1,83 +1,88 @@
-"use client";
+'use client'
 
-import { useRouter } from "next/navigation";
-import { useId, useState } from "react";
-import type { FormEvent } from "react";
-import { GitPullRequestArrow, X } from "lucide-react";
-import { Button } from "@/shared/ui/button";
-import { TextField } from "@/shared/ui/text-field";
-import { formatPullRequestRef, parseGitHubPullRequestUrl, type GitHubPullRequestRef } from "@/entities/github";
+import { useRouter } from 'next/navigation'
+import { useId, useState } from 'react'
+import type { FormEvent } from 'react'
+import { GitPullRequestArrow, X } from 'lucide-react'
+import { Button } from '@/shared/ui/button'
+import { TextField } from '@/shared/ui/text-field'
+import {
+  formatPullRequestRef,
+  parseGitHubPullRequestUrl,
+  type GitHubPullRequestRef,
+} from '@/entities/github'
 
 type PullRequestImportResponse = {
   counts?: {
-    comments: number;
-    commits: number;
-    files: number;
-  };
-  error?: string;
-  pullRequest?: GitHubPullRequestRef;
+    comments: number
+    commits: number
+    files: number
+  }
+  error?: string
+  pullRequest?: GitHubPullRequestRef
   snapshot?: {
-    headSha: string;
-    id: string;
-  };
-};
+    headSha: string
+    id: string
+  }
+}
 
 export function OpenPullRequestDialog() {
-  const [error, setError] = useState<string | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [importResult, setImportResult] = useState<PullRequestImportResponse | null>(null);
-  const router = useRouter();
-  const titleId = useId();
-  const descriptionId = useId();
+  const [error, setError] = useState<string | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [importResult, setImportResult] =
+    useState<PullRequestImportResponse | null>(null)
+  const router = useRouter()
+  const titleId = useId()
+  const descriptionId = useId()
 
   async function submitPullRequestUrl(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+    event.preventDefault()
 
-    const formData = new FormData(event.currentTarget);
-    const url = String(formData.get("pull-request-url") ?? "");
-    const parsed = parseGitHubPullRequestUrl(url);
+    const formData = new FormData(event.currentTarget)
+    const url = String(formData.get('pull-request-url') ?? '')
+    const parsed = parseGitHubPullRequestUrl(url)
 
-    setImportResult(null);
+    setImportResult(null)
 
     if (!parsed.ok) {
-      setError(parsed.error);
-      return;
+      setError(parsed.error)
+      return
     }
 
-    setError(null);
-    setIsSubmitting(true);
+    setError(null)
+    setIsSubmitting(true)
 
     try {
-      const response = await fetch("/api/pull-requests/import", {
+      const response = await fetch('/api/pull-requests/import', {
         body: JSON.stringify({ url }),
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
-        method: "POST",
-      });
-      const body = await readPullRequestImportResponse(response);
+        method: 'POST',
+      })
+      const body = await readPullRequestImportResponse(response)
 
       if (!response.ok || !body.pullRequest || !body.snapshot || !body.counts) {
-        setError(body.error ?? `The pull request import request failed with HTTP ${response.status}.`);
-        return;
+        setError(
+          body.error ??
+            `The pull request import request failed with HTTP ${response.status}.`,
+        )
+        return
       }
 
-      setImportResult(body);
-      router.push(`/review/${encodeURIComponent(body.snapshot.id)}?generate=1`);
+      setImportResult(body)
+      router.push(`/review/${encodeURIComponent(body.snapshot.id)}?generate=1`)
     } catch {
-      setError("The pull request import route is unavailable.");
+      setError('The pull request import route is unavailable.')
     } finally {
-      setIsSubmitting(false);
+      setIsSubmitting(false)
     }
   }
 
   return (
     <>
-      <Button
-        onClick={() => setIsOpen(true)}
-        type="button"
-      >
+      <Button onClick={() => setIsOpen(true)} type="button">
         <GitPullRequestArrow aria-hidden="true" className="size-4" />
         Open pull request
       </Button>
@@ -98,13 +103,19 @@ export function OpenPullRequestDialog() {
               <h2 className="text-sm font-semibold" id={titleId}>
                 Open pull request
               </h2>
-              <p className="mt-1 text-xs text-[var(--muted)]" id={descriptionId}>
+              <p
+                className="mt-1 text-xs text-[var(--muted)]"
+                id={descriptionId}
+              >
                 Paste a GitHub pull request URL to import it into Codewalk.
               </p>
             </div>
 
             <div className="grid gap-2 px-4 py-4">
-              <label className="text-xs font-medium text-[var(--muted)]" htmlFor="pull-request-url">
+              <label
+                className="text-xs font-medium text-[var(--muted)]"
+                htmlFor="pull-request-url"
+              >
                 Pull request URL
               </label>
               <TextField
@@ -114,15 +125,20 @@ export function OpenPullRequestDialog() {
                 placeholder="https://github.com/org/repo/pull/123"
                 type="url"
               />
-              {error ? <p className="text-xs text-[var(--danger)]">{error}</p> : null}
+              {error ? (
+                <p className="text-xs text-[var(--danger)]">{error}</p>
+              ) : null}
               {importResult?.pullRequest && importResult.counts ? (
                 <p className="text-xs text-[var(--success)]">
-                  Imported {formatPullRequestRef(importResult.pullRequest)} with {importResult.counts.files} files,{" "}
-                  {importResult.counts.commits} commits, and {importResult.counts.comments} comments.
+                  Imported {formatPullRequestRef(importResult.pullRequest)} with{' '}
+                  {importResult.counts.files} files,{' '}
+                  {importResult.counts.commits} commits, and{' '}
+                  {importResult.counts.comments} comments.
                 </p>
               ) : (
                 <p className="text-xs text-[var(--muted)]">
-                  Codewalk stores a reusable snapshot with PR metadata, files, commits, and available comments.
+                  Codewalk stores a reusable snapshot with PR metadata, files,
+                  commits, and available comments.
                 </p>
               )}
             </div>
@@ -136,27 +152,25 @@ export function OpenPullRequestDialog() {
                 <X aria-hidden="true" className="size-4" />
                 Cancel
               </Button>
-              <Button
-                disabled={isSubmitting}
-                type="submit"
-                variant="primary"
-              >
-                {isSubmitting ? "Importing" : "Import PR"}
+              <Button disabled={isSubmitting} type="submit" variant="primary">
+                {isSubmitting ? 'Importing' : 'Import PR'}
               </Button>
             </div>
           </form>
         </div>
       ) : null}
     </>
-  );
+  )
 }
 
-async function readPullRequestImportResponse(response: Response): Promise<PullRequestImportResponse> {
-  const contentType = response.headers.get("Content-Type") ?? "";
+async function readPullRequestImportResponse(
+  response: Response,
+): Promise<PullRequestImportResponse> {
+  const contentType = response.headers.get('Content-Type') ?? ''
 
-  if (!contentType.toLowerCase().includes("application/json")) {
-    return {};
+  if (!contentType.toLowerCase().includes('application/json')) {
+    return {}
   }
 
-  return (await response.json()) as PullRequestImportResponse;
+  return (await response.json()) as PullRequestImportResponse
 }

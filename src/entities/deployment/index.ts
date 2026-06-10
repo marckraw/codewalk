@@ -1,1 +1,4 @@
-export { getDeploymentDiagnostics, type DeploymentDiagnostics } from "./diagnostics";
+export {
+  getDeploymentDiagnostics,
+  type DeploymentDiagnostics,
+} from './diagnostics'

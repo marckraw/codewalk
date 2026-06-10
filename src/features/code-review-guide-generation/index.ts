@@ -6,4 +6,4 @@ export {
   type GenerateCodeReviewGuideInput,
   type GenerateCodeReviewGuideResult,
   type StartCodeReviewGuideGenerationRunResult,
-} from "./code-review-guide-generation.service";
+} from './code-review-guide-generation.service'

@@ -1,53 +1,59 @@
-import "server-only";
+import 'server-only'
 
-import { getAgentsDaemonConfig, getAgentsDaemonRequestTimeoutMs } from "@/entities/agents-daemon";
-import { getGitHubRequestTimeoutMs } from "@/entities/github-server";
-import { getGitHubWebhookConfig } from "@/entities/github-server";
+import {
+  getAgentsDaemonConfig,
+  getAgentsDaemonRequestTimeoutMs,
+} from '@/entities/agents-daemon'
+import { getGitHubRequestTimeoutMs } from '@/entities/github-server'
+import { getGitHubWebhookConfig } from '@/entities/github-server'
 
 export type DeploymentDiagnostics = {
   agentsDaemon: {
-    baseUrl: string | null;
-    defaultModel: string | null;
-    defaultProvider: string | null;
-    missingKeys: string[];
-    ok: boolean;
-    state: string;
-  };
+    baseUrl: string | null
+    defaultModel: string | null
+    defaultProvider: string | null
+    missingKeys: string[]
+    ok: boolean
+    state: string
+  }
   app: {
-    baseUrl: string | null;
-    ok: boolean;
-    state: "configured" | "invalid-url" | "missing-url";
-  };
+    baseUrl: string | null
+    ok: boolean
+    state: 'configured' | 'invalid-url' | 'missing-url'
+  }
   auth: {
-    missingKeys: string[];
-    ok: boolean;
-  };
+    missingKeys: string[]
+    ok: boolean
+  }
   database: {
-    missingKeys: string[];
-    ok: boolean;
-  };
+    missingKeys: string[]
+    ok: boolean
+  }
   github: {
-    allowedOwner: string | null;
-    missingKeys: string[];
-    ok: boolean;
-  };
-  ok: boolean;
+    allowedOwner: string | null
+    missingKeys: string[]
+    ok: boolean
+  }
+  ok: boolean
   runtime: {
-    agentsDaemonRequestTimeoutMs: number;
-    githubRequestTimeoutMs: number;
-    nodeEnv: string | null;
-    vercelEnv: string | null;
-  };
-};
+    agentsDaemonRequestTimeoutMs: number
+    githubRequestTimeoutMs: number
+    nodeEnv: string | null
+    vercelEnv: string | null
+  }
+}
 
 export function getDeploymentDiagnostics(
   env: Record<string, string | undefined> = process.env,
 ): DeploymentDiagnostics {
-  const app = getAppDiagnostics(env);
-  const auth = getPresenceDiagnostics(env, ["NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "CLERK_SECRET_KEY"]);
-  const database = getPresenceDiagnostics(env, ["DATABASE_URL"]);
-  const agentsDaemon = getAgentsDaemonDiagnostics(env);
-  const github = getGitHubDiagnostics(env);
+  const app = getAppDiagnostics(env)
+  const auth = getPresenceDiagnostics(env, [
+    'NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY',
+    'CLERK_SECRET_KEY',
+  ])
+  const database = getPresenceDiagnostics(env, ['DATABASE_URL'])
+  const agentsDaemon = getAgentsDaemonDiagnostics(env)
+  const github = getGitHubDiagnostics(env)
 
   return {
     agentsDaemon,
@@ -62,59 +68,66 @@ export function getDeploymentDiagnostics(
       nodeEnv: env.NODE_ENV ?? null,
       vercelEnv: env.VERCEL_ENV ?? null,
     },
-  };
+  }
 }
 
-function getAppDiagnostics(env: Record<string, string | undefined>): DeploymentDiagnostics["app"] {
-  const rawBaseUrl = env.NEXT_PUBLIC_APP_URL?.trim() ?? "";
+function getAppDiagnostics(
+  env: Record<string, string | undefined>,
+): DeploymentDiagnostics['app'] {
+  const rawBaseUrl = env.NEXT_PUBLIC_APP_URL?.trim() ?? ''
 
   if (!rawBaseUrl) {
     return {
       baseUrl: null,
       ok: false,
-      state: "missing-url",
-    };
+      state: 'missing-url',
+    }
   }
 
   try {
-    const url = new URL(rawBaseUrl);
+    const url = new URL(rawBaseUrl)
 
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
       return {
         baseUrl: null,
         ok: false,
-        state: "invalid-url",
-      };
+        state: 'invalid-url',
+      }
     }
 
-    url.hash = "";
-    url.search = "";
+    url.hash = ''
+    url.search = ''
 
     return {
-      baseUrl: url.toString().replace(/\/+$/, ""),
+      baseUrl: url.toString().replace(/\/+$/, ''),
       ok: true,
-      state: "configured",
-    };
+      state: 'configured',
+    }
   } catch {
     return {
       baseUrl: null,
       ok: false,
-      state: "invalid-url",
-    };
+      state: 'invalid-url',
+    }
   }
 }
 
-function getPresenceDiagnostics(env: Record<string, string | undefined>, keys: string[]) {
-  const missingKeys = keys.filter((key) => !env[key]?.trim());
+function getPresenceDiagnostics(
+  env: Record<string, string | undefined>,
+  keys: string[],
+) {
+  const missingKeys = keys.filter((key) => !env[key]?.trim())
 
   return {
     missingKeys,
     ok: missingKeys.length === 0,
-  };
+  }
 }
 
-function getAgentsDaemonDiagnostics(env: Record<string, string | undefined>): DeploymentDiagnostics["agentsDaemon"] {
-  const config = getAgentsDaemonConfig(env);
+function getAgentsDaemonDiagnostics(
+  env: Record<string, string | undefined>,
+): DeploymentDiagnostics['agentsDaemon'] {
+  const config = getAgentsDaemonConfig(env)
 
   if (!config.ok) {
     return {
@@ -124,7 +137,7 @@ function getAgentsDaemonDiagnostics(env: Record<string, string | undefined>): De
       missingKeys: config.missingKeys,
       ok: false,
       state: config.state,
-    };
+    }
   }
 
   return {
@@ -133,24 +146,26 @@ function getAgentsDaemonDiagnostics(env: Record<string, string | undefined>): De
     defaultProvider: config.config.defaultProvider,
     missingKeys: [],
     ok: true,
-    state: "configured",
-  };
+    state: 'configured',
+  }
 }
 
-function getGitHubDiagnostics(env: Record<string, string | undefined>): DeploymentDiagnostics["github"] {
-  const config = getGitHubWebhookConfig(env);
+function getGitHubDiagnostics(
+  env: Record<string, string | undefined>,
+): DeploymentDiagnostics['github'] {
+  const config = getGitHubWebhookConfig(env)
 
   if (!config.ok) {
     return {
       allowedOwner: null,
       missingKeys: config.missingKeys,
       ok: false,
-    };
+    }
   }
 
   return {
     allowedOwner: config.allowedOwner,
     missingKeys: [],
     ok: true,
-  };
+  }
 }
