@@ -24,7 +24,7 @@ export type GitHubPullRequestWebhookResolution =
     }
   | {
       ok: false;
-      reason: "ignored-action" | "ignored-event" | "invalid-payload" | "outside-allowed-owner";
+      reason: "ignored-action" | "ignored-event" | "invalid-payload";
     };
 
 export function getGitHubWebhookConfig(env: Record<string, string | undefined> = process.env): GitHubWebhookConfig {
@@ -94,7 +94,6 @@ export function verifyGitHubWebhookSignature(input: {
 }
 
 export function resolveGitHubPullRequestWebhook(input: {
-  allowedOwner: string;
   event: string | null;
   payload: unknown;
 }): GitHubPullRequestWebhookResolution {
@@ -118,10 +117,6 @@ export function resolveGitHubPullRequestWebhook(input: {
 
   if (!repoOwner || !repoName || !number || !Number.isInteger(number) || number < 1) {
     return { ok: false, reason: "invalid-payload" };
-  }
-
-  if (repoOwner.toLowerCase() !== input.allowedOwner.toLowerCase()) {
-    return { ok: false, reason: "outside-allowed-owner" };
   }
 
   return {

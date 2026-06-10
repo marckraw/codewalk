@@ -29,6 +29,12 @@ export function SiteHeader() {
             >
               Reviews
             </Link>
+            <Link
+              className="rounded-md px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--panel-subtle)] hover:text-[var(--foreground)]"
+              href="/settings"
+            >
+              Settings
+            </Link>
           </nav>
         </div>
         <div className="flex shrink-0 items-center gap-2">

@@ -5,6 +5,7 @@ import {
 } from "@/lib/code-review-guide-generation";
 import { updateCodeReviewGuideGenerationComment } from "@/lib/db/code-review-guide-generations";
 import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
+import { listRepositoryReviewRules } from "@/lib/db/repository-review-rules";
 import {
   buildCodewalkReviewCommentBody,
   buildCodewalkReviewUrl,
@@ -13,6 +14,7 @@ import {
   type CodewalkReviewCommentState,
 } from "@/lib/github/codewalk-review-comments";
 import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
+import { evaluateRepositoryReviewAccess } from "@/lib/github/repository-review-access";
 import { GitHubClientError } from "@/lib/github/server/errors";
 import {
   extractGitHubWebhookJson,
@@ -67,7 +69,6 @@ export async function POST(request: Request) {
   }
 
   const resolved = resolveGitHubPullRequestWebhook({
-    allowedOwner: config.allowedOwner,
     event: request.headers.get("x-github-event"),
     payload,
   });
@@ -81,6 +82,23 @@ export async function POST(request: Request) {
   }
 
   try {
+    const access = evaluateRepositoryReviewAccess({
+      allowedOwner: config.allowedOwner,
+      owner: resolved.pullRequest.owner,
+      repo: resolved.pullRequest.repo,
+      rules: await listRepositoryReviewRules(),
+    });
+
+    if (!access.allowed) {
+      logCodewalkEvent("codewalk.github_webhook.ignored", {
+        event: request.headers.get("x-github-event"),
+        owner: resolved.pullRequest.owner,
+        reason: access.reason,
+        repo: resolved.pullRequest.repo,
+      });
+      return NextResponse.json({ reason: access.reason, status: "ignored" }, { status: 202 });
+    }
+
     logCodewalkEvent("codewalk.github_webhook.accepted", {
       action: resolved.action,
       owner: resolved.pullRequest.owner,

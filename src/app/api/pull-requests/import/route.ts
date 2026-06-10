@@ -1,10 +1,12 @@
 import { NextResponse } from "next/server";
 import { getCurrentCodewalkUser } from "@/lib/auth/server";
 import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
+import { listRepositoryReviewRules } from "@/lib/db/repository-review-rules";
 import { upsertAuthenticatedUser } from "@/lib/db/users";
 import { parseGitHubPullRequestUrl } from "@/lib/github/pull-request-url";
+import { evaluateRepositoryReviewAccess } from "@/lib/github/repository-review-access";
 import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
-import { getGitHubAutomationConfig, isAllowedGitHubOwner } from "@/lib/github/server/config";
+import { getGitHubAutomationConfig } from "@/lib/github/server/config";
 import { GitHubClientError } from "@/lib/github/server/errors";
 
 export async function POST(request: Request) {
@@ -50,14 +52,22 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isAllowedGitHubOwner(parsed.pullRequest.owner, githubConfig.allowedOwner)) {
-    return NextResponse.json(
-      { error: `Codewalk can only import pull requests from ${githubConfig.allowedOwner}.` },
-      { status: 403 },
-    );
-  }
-
   try {
+    const access = evaluateRepositoryReviewAccess({
+      allowedOwner: githubConfig.allowedOwner,
+      owner: parsed.pullRequest.owner,
+      repo: parsed.pullRequest.repo,
+      rules: await listRepositoryReviewRules(),
+    });
+
+    if (!access.allowed) {
+      const error =
+        access.reason === "blocklisted"
+          ? `Guided reviews are blocked for ${parsed.pullRequest.owner}/${parsed.pullRequest.repo}. Remove the block rule in Settings to import it.`
+          : `Codewalk only imports pull requests from ${githubConfig.allowedOwner} or whitelisted repositories. Add ${parsed.pullRequest.owner}/${parsed.pullRequest.repo} in Settings first.`;
+      return NextResponse.json({ error }, { status: 403 });
+    }
+
     const user = await upsertAuthenticatedUser({
       clerkUserId: currentUser.userId,
       email: currentUser.email,
