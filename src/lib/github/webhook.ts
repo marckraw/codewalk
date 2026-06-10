@@ -14,7 +14,14 @@ export type GitHubWebhookConfig =
       ok: false;
     };
 
-export type GitHubPullRequestWebhookAction = "opened" | "reopened" | "synchronize" | "ready_for_review";
+export type GitHubPullRequestWebhookAction =
+  | "closed"
+  | "converted_to_draft"
+  | "edited"
+  | "opened"
+  | "ready_for_review"
+  | "reopened"
+  | "synchronize";
 
 export type GitHubPullRequestWebhookResolution =
   | {
@@ -131,7 +138,19 @@ export function resolveGitHubPullRequestWebhook(input: {
 }
 
 function isHandledPullRequestAction(value: string | null): value is GitHubPullRequestWebhookAction {
-  return value === "opened" || value === "reopened" || value === "synchronize" || value === "ready_for_review";
+  return (
+    value === "closed" ||
+    value === "converted_to_draft" ||
+    value === "edited" ||
+    value === "opened" ||
+    value === "ready_for_review" ||
+    value === "reopened" ||
+    value === "synchronize"
+  );
+}
+
+export function shouldGenerateGuideForPullRequestWebhookAction(action: GitHubPullRequestWebhookAction) {
+  return action === "opened" || action === "reopened" || action === "synchronize" || action === "ready_for_review";
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

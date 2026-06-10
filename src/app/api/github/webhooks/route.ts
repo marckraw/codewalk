@@ -20,6 +20,7 @@ import {
   extractGitHubWebhookJson,
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
+  shouldGenerateGuideForPullRequestWebhookAction,
   verifyGitHubWebhookSignature,
 } from "@/lib/github/webhook";
 import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/lib/observability";
@@ -118,6 +119,22 @@ export async function POST(request: Request) {
       repo: persistedSnapshot.repo,
       snapshotId: persistedSnapshot.id,
     });
+
+    if (!shouldGenerateGuideForPullRequestWebhookAction(resolved.action)) {
+      return NextResponse.json(
+        {
+          snapshot: {
+            headSha: persistedSnapshot.headSha,
+            id: persistedSnapshot.id,
+            number: persistedSnapshot.number,
+            owner: persistedSnapshot.owner,
+            repo: persistedSnapshot.repo,
+          },
+          status: "refreshed",
+        },
+        { status: 202 },
+      );
+    }
 
     const preparingComment = await postReviewComment({
       existingCommentId: null,

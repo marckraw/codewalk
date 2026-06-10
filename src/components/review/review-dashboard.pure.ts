@@ -48,7 +48,10 @@ export function normalizeReviewSearchQuery(query: string): string {
  * remember: title, owner/repo, PR number (`186` or `#186`), branches, author.
  */
 export function matchesReviewSearchQuery(
-  item: Pick<ReviewWorkspaceSummary, "authorLogin" | "baseRef" | "headRef" | "number" | "owner" | "repo" | "title">,
+  item: Pick<
+    ReviewWorkspaceSummary,
+    "authorLogin" | "baseRef" | "headRef" | "number" | "owner" | "prStatus" | "repo" | "title"
+  >,
   normalizedQuery: string,
 ): boolean {
   if (!normalizedQuery) {
@@ -61,12 +64,72 @@ export function matchesReviewSearchQuery(
     `#${item.number}`,
     item.baseRef,
     item.headRef,
+    item.prStatus.replaceAll("_", " "),
     item.authorLogin ?? "",
   ]
     .join(" ")
     .toLowerCase();
 
   return normalizedQuery.split(/\s+/).every((term) => haystack.includes(term));
+}
+
+const DAY_MS = 86_400_000;
+
+export const REVIEW_RECENCY_GROUP_LABELS = ["Today", "Yesterday", "This week", "This month", "Older"] as const;
+export type ReviewRecencyGroupLabel = (typeof REVIEW_RECENCY_GROUP_LABELS)[number];
+
+export interface ReviewRecencyGroup {
+  items: ReviewWorkspaceSummary[];
+  label: ReviewRecencyGroupLabel;
+}
+
+/**
+ * Buckets an `updatedAt` relative to the viewer's local midnight, so "Today"
+ * matches the calendar day they see: Today, Yesterday, This week (past 7
+ * days), This month (past 30 days), Older.
+ */
+export function reviewRecencyGroupLabel(value: Date | string, now: Date): ReviewRecencyGroupLabel {
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const time = toDate(value).getTime();
+
+  if (time >= startOfToday.getTime()) {
+    return "Today";
+  }
+  if (time >= startOfToday.getTime() - DAY_MS) {
+    return "Yesterday";
+  }
+  if (time >= startOfToday.getTime() - 7 * DAY_MS) {
+    return "This week";
+  }
+  if (time >= startOfToday.getTime() - 30 * DAY_MS) {
+    return "This month";
+  }
+  return "Older";
+}
+
+/**
+ * Groups reviews by update recency. Empty buckets are omitted and the input
+ * order is preserved within each bucket (the server already sorts newest
+ * first).
+ */
+export function groupReviewWorkspacesByRecency(items: ReviewWorkspaceSummary[], now: Date): ReviewRecencyGroup[] {
+  const buckets = new Map<ReviewRecencyGroupLabel, ReviewWorkspaceSummary[]>();
+
+  for (const item of items) {
+    const label = reviewRecencyGroupLabel(item.updatedAt, now);
+    const bucket = buckets.get(label);
+    if (bucket) {
+      bucket.push(item);
+    } else {
+      buckets.set(label, [item]);
+    }
+  }
+
+  return REVIEW_RECENCY_GROUP_LABELS.filter((label) => buckets.has(label)).map((label) => ({
+    items: buckets.get(label)!,
+    label,
+  }));
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

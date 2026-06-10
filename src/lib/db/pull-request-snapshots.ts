@@ -1,7 +1,8 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { NormalizedPullRequestSnapshot } from "@/lib/github/domain";
+import type { GitHubPullRequestRef } from "@/lib/github/pull-request-url";
 import { getDb } from "./client";
 import {
   pullRequestComments,
@@ -53,10 +54,12 @@ export function buildPullRequestSnapshotRows(input: PersistPullRequestSnapshotIn
       authorLogin: pullRequest.authorLogin,
       baseRef: pullRequest.baseRef,
       baseSha: pullRequest.baseSha,
+      draft: pullRequest.draft,
       headRef: pullRequest.headRef,
       headSha: pullRequest.headSha,
       importedAt: new Date(),
       importedByUserId,
+      mergedAt: pullRequest.mergedAt ? new Date(pullRequest.mergedAt) : null,
       number: pullRequest.number,
       owner: pullRequest.owner,
       repo: pullRequest.repo,
@@ -81,10 +84,12 @@ export async function persistPullRequestSnapshot(input: PersistPullRequestSnapsh
           authorLogin: rows.snapshot.authorLogin,
           baseRef: rows.snapshot.baseRef,
           baseSha: rows.snapshot.baseSha,
+          draft: rows.snapshot.draft,
           headRef: rows.snapshot.headRef,
           headSha: rows.snapshot.headSha,
           importedAt: rows.snapshot.importedAt,
           importedByUserId: rows.snapshot.importedByUserId,
+          mergedAt: rows.snapshot.mergedAt,
           state: rows.snapshot.state,
           title: rows.snapshot.title,
           updatedAt: rows.snapshot.updatedAt,
@@ -121,6 +126,23 @@ export async function persistPullRequestSnapshot(input: PersistPullRequestSnapsh
         .values(rows.comments.map((comment) => ({ ...comment, snapshotId: snapshot.id })));
     }
 
+    await tx
+      .update(pullRequestSnapshots)
+      .set({
+        draft: rows.snapshot.draft,
+        mergedAt: rows.snapshot.mergedAt,
+        state: rows.snapshot.state,
+        title: rows.snapshot.title,
+        url: rows.snapshot.url,
+      })
+      .where(
+        and(
+          eq(pullRequestSnapshots.owner, rows.snapshot.owner),
+          eq(pullRequestSnapshots.repo, rows.snapshot.repo),
+          eq(pullRequestSnapshots.number, rows.snapshot.number),
+        ),
+      );
+
     return snapshot;
   });
 }
@@ -128,6 +150,26 @@ export async function persistPullRequestSnapshot(input: PersistPullRequestSnapsh
 export async function getPullRequestSnapshotById(snapshotId: string): Promise<PullRequestSnapshotRow | null> {
   const db = getDb();
   const [snapshot] = await db.select().from(pullRequestSnapshots).where(eq(pullRequestSnapshots.id, snapshotId)).limit(1);
+
+  return snapshot ?? null;
+}
+
+export async function getLatestPullRequestSnapshotByRef(
+  ref: GitHubPullRequestRef,
+): Promise<PullRequestSnapshotRow | null> {
+  const db = getDb();
+  const [snapshot] = await db
+    .select()
+    .from(pullRequestSnapshots)
+    .where(
+      and(
+        eq(pullRequestSnapshots.owner, ref.owner),
+        eq(pullRequestSnapshots.repo, ref.repo),
+        eq(pullRequestSnapshots.number, ref.number),
+      ),
+    )
+    .orderBy(desc(pullRequestSnapshots.updatedAt), desc(pullRequestSnapshots.importedAt))
+    .limit(1);
 
   return snapshot ?? null;
 }

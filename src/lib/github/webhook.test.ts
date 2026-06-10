@@ -4,6 +4,7 @@ import {
   extractGitHubWebhookJson,
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
+  shouldGenerateGuideForPullRequestWebhookAction,
   verifyGitHubWebhookSignature,
 } from "./webhook";
 
@@ -67,6 +68,34 @@ describe("GitHub webhook helpers", () => {
     });
   });
 
+  it("extracts lifecycle-only pull request webhook targets", () => {
+    expect(
+      resolveGitHubPullRequestWebhook({
+        event: "pull_request",
+        payload: {
+          action: "closed",
+          pull_request: { number: 42 },
+          repository: { name: "example", owner: { login: "ef-global" } },
+        },
+      }),
+    ).toEqual({
+      action: "closed",
+      ok: true,
+      pullRequest: {
+        number: 42,
+        owner: "ef-global",
+        repo: "example",
+      },
+    });
+  });
+
+  it("classifies which handled pull request webhook actions generate guides", () => {
+    expect(shouldGenerateGuideForPullRequestWebhookAction("opened")).toBe(true);
+    expect(shouldGenerateGuideForPullRequestWebhookAction("ready_for_review")).toBe(true);
+    expect(shouldGenerateGuideForPullRequestWebhookAction("closed")).toBe(false);
+    expect(shouldGenerateGuideForPullRequestWebhookAction("converted_to_draft")).toBe(false);
+  });
+
   it("ignores unsupported events and actions", () => {
     expect(resolveGitHubPullRequestWebhook({ event: "push", payload: {} })).toEqual({
       ok: false,
@@ -76,7 +105,7 @@ describe("GitHub webhook helpers", () => {
       resolveGitHubPullRequestWebhook({
         event: "pull_request",
         payload: {
-          action: "closed",
+          action: "labeled",
           pull_request: { number: 42 },
           repository: { name: "example", owner: { login: "ef-global" } },
         },
