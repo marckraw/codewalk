@@ -13,13 +13,14 @@ import type {
 import { REVIEW_WORKSPACE_POLL_INTERVAL_MS } from './use-review-workspace-live.pure'
 import {
   filterReviewWorkspaceSummaries,
-  groupReviewWorkspacesByRecency,
+  groupReviewWorkspacePullRequestGroupsByRecency,
+  groupReviewWorkspacesByPullRequest,
   listReviewWorkspaceRepos,
   REVIEW_STATUS_FILTERS,
   type ReviewRepoFilter,
   type ReviewStatusFilter,
 } from './review-dashboard.pure'
-import { ReviewWorkspaceRow } from './review-workspace-row'
+import { ReviewWorkspaceGroup } from './review-workspace-group'
 
 const STATUS_LABEL: Record<ReviewStatusFilter, string> = {
   all: 'All',
@@ -86,15 +87,22 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
       }),
     [items, query, repoFilter, statusFilter],
   )
+  const visibleGroups = useMemo(
+    () => groupReviewWorkspacesByPullRequest(visibleItems),
+    [visibleItems],
+  )
   // Recency buckets need a local clock, so on the server (now is null) the
-  // list renders flat and groups appear right after hydration — same tradeoff
-  // as the relative timestamps.
+  // list renders without recency sections until hydration — same tradeoff as
+  // the relative timestamps.
   const recencyGroups = useMemo(
     () =>
       nowMs
-        ? groupReviewWorkspacesByRecency(visibleItems, new Date(nowMs))
+        ? groupReviewWorkspacePullRequestGroupsByRecency(
+            visibleGroups,
+            new Date(nowMs),
+          )
         : null,
-    [visibleItems, nowMs],
+    [visibleGroups, nowMs],
   )
 
   return (
@@ -169,12 +177,16 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
               <h2 className="flex items-baseline gap-2 text-xs font-medium uppercase tracking-wide text-[var(--muted)]">
                 {group.label}
                 <span className="font-normal normal-case tracking-normal">
-                  {group.items.length}
+                  {group.groups.length}
                 </span>
               </h2>
               <ul className="grid gap-2">
-                {group.items.map((item) => (
-                  <ReviewWorkspaceRow item={item} key={item.id} now={now} />
+                {group.groups.map((reviewGroup) => (
+                  <ReviewWorkspaceGroup
+                    group={reviewGroup}
+                    key={reviewGroup.id}
+                    now={now}
+                  />
                 ))}
               </ul>
             </section>
@@ -182,8 +194,12 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
         </div>
       ) : (
         <ul className="grid gap-2">
-          {visibleItems.map((item) => (
-            <ReviewWorkspaceRow item={item} key={item.id} now={now} />
+          {visibleGroups.map((reviewGroup) => (
+            <ReviewWorkspaceGroup
+              group={reviewGroup}
+              key={reviewGroup.id}
+              now={now}
+            />
           ))}
         </ul>
       )}

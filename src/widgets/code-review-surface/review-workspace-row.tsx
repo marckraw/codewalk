@@ -31,19 +31,22 @@ const STATUS_LABEL: Record<ReviewWorkspaceState, string> = {
 }
 
 export function ReviewWorkspaceRow({
+  isLatest,
   item,
   now,
 }: {
+  isLatest?: boolean
   item: ReviewWorkspaceSummary
   now: Date | null
 }) {
   return (
-    <li className="flex flex-col gap-3 rounded-md border border-[var(--border)] bg-[var(--panel)] p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div className="flex flex-col gap-3 rounded-md border border-[var(--border)] bg-[var(--panel)] p-3 sm:flex-row sm:items-center sm:justify-between">
       <Link
         className="group flex min-w-0 flex-1 flex-col gap-1 outline-none"
         href={`/review/${encodeURIComponent(item.id)}`}
       >
         <div className="flex min-w-0 items-center gap-2">
+          {isLatest ? <Badge tone="success">Latest</Badge> : null}
           <Badge tone={STATUS_TONE[item.status]}>
             {STATUS_LABEL[item.status]}
           </Badge>
@@ -93,6 +96,6 @@ export function ReviewWorkspaceRow({
           </Link>
         </Button>
       </div>
-    </li>
+    </div>
   )
 }
