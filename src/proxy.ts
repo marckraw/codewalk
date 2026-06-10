@@ -1,7 +1,7 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
-import { PROTECTED_ROUTE_PATTERNS } from "@/lib/auth/protected-routes";
-import { isClerkServerConfigured } from "@/lib/auth/server-config";
+import { PROTECTED_ROUTE_PATTERNS } from "@/entities/auth";
+import { isClerkServerConfigured } from "@/entities/auth-server";
 
 const isProtectedRoute = createRouteMatcher(PROTECTED_ROUTE_PATTERNS);
 

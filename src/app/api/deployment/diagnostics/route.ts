@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { getDeploymentDiagnostics } from "@/lib/deployment/diagnostics";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { getDeploymentDiagnostics } from "@/entities/deployment";
 
 export const runtime = "nodejs";
 

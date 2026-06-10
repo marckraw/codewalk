@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { AuthProvider } from "@/components/auth/auth-provider";
+import { AuthProvider } from "@/features/auth";
 import "./globals.css";
 
 export const metadata: Metadata = {

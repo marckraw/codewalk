@@ -2,9 +2,9 @@ import { after, NextResponse } from "next/server";
 import {
   CodeReviewGuideGenerationError,
   startCodeReviewGuideGenerationRun,
-} from "@/lib/code-review-guide-generation";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { upsertAuthenticatedUser } from "@/lib/db/users";
+} from "@/features/code-review-guide-generation";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { upsertAuthenticatedUser } from "@/entities/database";
 
 export const maxDuration = 800;
 export const runtime = "nodejs";

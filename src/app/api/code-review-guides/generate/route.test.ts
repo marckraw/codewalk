@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CodeReviewGuideGenerationError } from "@/lib/code-review-guide-generation";
+import { CodeReviewGuideGenerationError } from "@/features/code-review-guide-generation";
 import { POST } from "./route";
 
 vi.mock("server-only", () => ({}));
@@ -17,17 +17,17 @@ vi.mock("next/server", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/auth/server", () => ({
+vi.mock("@/entities/auth-server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
 
-vi.mock("@/lib/db/users", () => ({
+vi.mock("@/entities/database", () => ({
   upsertAuthenticatedUser: vi.fn(),
 }));
 
-vi.mock("@/lib/code-review-guide-generation", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/code-review-guide-generation")>(
-    "@/lib/code-review-guide-generation",
+vi.mock("@/features/code-review-guide-generation", async () => {
+  const actual = await vi.importActual<typeof import("@/features/code-review-guide-generation")>(
+    "@/features/code-review-guide-generation",
   );
 
   return {
@@ -36,9 +36,9 @@ vi.mock("@/lib/code-review-guide-generation", async () => {
   };
 });
 
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { startCodeReviewGuideGenerationRun } from "@/lib/code-review-guide-generation";
-import { upsertAuthenticatedUser } from "@/lib/db/users";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { startCodeReviewGuideGenerationRun } from "@/features/code-review-guide-generation";
+import { upsertAuthenticatedUser } from "@/entities/database";
 
 describe("POST /api/code-review-guides/generate", () => {
   const complete = vi.fn();

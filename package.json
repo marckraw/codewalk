@@ -13,8 +13,11 @@
     "lint": "eslint .",
     "start": "next start",
     "test": "vitest --run",
+    "test:pure": "vitest --run --config vitest.pure.config.ts",
+    "test:unit": "vitest --run --config vitest.unit.config.ts",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "agent:pre-push": "chaperone check --fix && (git diff --quiet --exit-code || (echo \"chaperone produced changes; commit them before pushing.\" && exit 1))"
   },
   "license": "UNLICENSED",
   "type": "module",

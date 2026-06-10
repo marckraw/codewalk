@@ -1,42 +1,36 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { NormalizedPullRequestSnapshot } from "@/lib/github/domain";
-import { GitHubClientError } from "@/lib/github/server/errors";
+import type { NormalizedPullRequestSnapshot } from "@/entities/github";
+import { GitHubClientError } from "@/entities/github-server";
 import { POST } from "./route";
 
 vi.mock("server-only", () => ({}));
 
-vi.mock("@/lib/auth/server", () => ({
+vi.mock("@/entities/auth-server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
 
-vi.mock("@/lib/db/users", () => ({
+vi.mock("@/entities/database", () => ({
+  persistPullRequestSnapshot: vi.fn(),
   upsertAuthenticatedUser: vi.fn(),
 }));
 
-vi.mock("@/lib/db/pull-request-snapshots", () => ({
-  persistPullRequestSnapshot: vi.fn(),
-}));
-
-vi.mock("@/lib/github/server/bot-token", () => ({
-  createServerGitHubRestClient: vi.fn(),
-}));
-
-vi.mock("@/lib/github/server/config", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/github/server/config")>(
-    "@/lib/github/server/config",
+vi.mock("@/entities/github-server", async () => {
+  const actual = await vi.importActual<typeof import("@/entities/github-server")>(
+    "@/entities/github-server",
   );
 
   return {
     ...actual,
+    createServerGitHubRestClient: vi.fn(),
     getGitHubAutomationConfig: vi.fn(),
   };
 });
 
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
-import { upsertAuthenticatedUser } from "@/lib/db/users";
-import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
-import { getGitHubAutomationConfig } from "@/lib/github/server/config";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { persistPullRequestSnapshot } from "@/entities/database";
+import { upsertAuthenticatedUser } from "@/entities/database";
+import { createServerGitHubRestClient } from "@/entities/github-server";
+import { getGitHubAutomationConfig } from "@/entities/github-server";
 
 describe("POST /api/pull-requests/import", () => {
   beforeEach(() => {

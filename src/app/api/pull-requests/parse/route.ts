@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { parseGitHubPullRequestUrl } from "@/lib/github/pull-request-url";
+import { parseGitHubPullRequestUrl } from "@/entities/github";
 
 export async function POST(request: Request) {
   let body: unknown;

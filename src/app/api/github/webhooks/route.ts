@@ -2,25 +2,25 @@ import { after, NextResponse } from "next/server";
 import {
   CodeReviewGuideGenerationError,
   generateAndPersistCodeReviewGuide,
-} from "@/lib/code-review-guide-generation";
-import { updateCodeReviewGuideGenerationComment } from "@/lib/db/code-review-guide-generations";
-import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
+} from "@/features/code-review-guide-generation";
+import { updateCodeReviewGuideGenerationComment } from "@/entities/database";
+import { persistPullRequestSnapshot } from "@/entities/database";
 import {
   buildCodewalkReviewCommentBody,
   buildCodewalkReviewUrl,
   getCodewalkAppBaseUrl,
   upsertCodewalkReviewComment,
   type CodewalkReviewCommentState,
-} from "@/lib/github/codewalk-review-comments";
-import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
-import { GitHubClientError } from "@/lib/github/server/errors";
+} from "@/entities/github-server";
+import { createServerGitHubRestClient } from "@/entities/github-server";
+import { GitHubClientError } from "@/entities/github-server";
 import {
   extractGitHubWebhookJson,
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
   verifyGitHubWebhookSignature,
-} from "@/lib/github/webhook";
-import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/lib/observability";
+} from "@/entities/github-server";
+import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/shared/lib/observability";
 
 export const maxDuration = 800;
 export const runtime = "nodejs";

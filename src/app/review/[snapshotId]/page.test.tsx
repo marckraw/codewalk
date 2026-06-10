@@ -2,28 +2,28 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ReviewSnapshotPage from "./page";
 
-vi.mock("@/components/auth/auth-controls", () => ({
+vi.mock("@/features/auth", () => ({
   AuthControls: () => <div data-testid="auth-controls" />,
 }));
 
-vi.mock("@/components/code-review-guide-generation-control", () => ({
+vi.mock("@/features/code-review-guide-generation-control", () => ({
   CodeReviewGuideGenerationControl: () => <button type="button">Regenerate</button>,
 }));
 
-vi.mock("@/components/theme-mode-toggle", () => ({
+vi.mock("@/features/theme-toggle", () => ({
   ThemeModeToggle: () => <div data-testid="theme-toggle" />,
 }));
 
-vi.mock("@/lib/auth/server", () => ({
+vi.mock("@/entities/auth-server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
 
-vi.mock("@/lib/db/review-workspace", () => ({
+vi.mock("@/entities/database", () => ({
   getReviewWorkspace: vi.fn(),
 }));
 
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { getReviewWorkspace } from "@/lib/db/review-workspace";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { getReviewWorkspace } from "@/entities/database";
 
 describe("ReviewSnapshotPage", () => {
   beforeEach(() => {

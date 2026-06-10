@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { getReviewWorkspace } from "@/lib/db/review-workspace";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { getReviewWorkspace } from "@/entities/database";
 
 export const runtime = "nodejs";
 

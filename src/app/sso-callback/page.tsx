@@ -1,6 +1,6 @@
-import { SsoCallback } from "@/components/auth/sso-callback";
-import { Panel, PanelHeader } from "@/components/ui/panel";
-import { getMissingClerkEnvironmentKeys, isClerkServerConfigured } from "@/lib/auth/server-config";
+import { SsoCallback } from "@/features/auth";
+import { Panel, PanelHeader } from "@/shared/ui/panel";
+import { getMissingClerkEnvironmentKeys, isClerkServerConfigured } from "@/entities/auth-server";
 
 export default function SsoCallbackPage() {
   if (!isClerkServerConfigured()) {

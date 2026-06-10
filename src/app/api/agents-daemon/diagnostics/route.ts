@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { checkAgentsDaemonConnection } from "@/lib/agents-daemon/client";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
+import { checkAgentsDaemonConnection } from "@/entities/agents-daemon";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
 
 export async function GET() {
   const currentUser = await getCurrentCodewalkUser();

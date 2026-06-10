@@ -1,11 +1,11 @@
-import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
-import { ReviewDashboard } from "@/components/review/review-dashboard";
-import { SiteHeader } from "@/components/site-header";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Panel, PanelHeader } from "@/components/ui/panel";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { listReviewWorkspaces } from "@/lib/db/review-workspace";
+import { OpenPullRequestDialog } from "@/features/pull-request-import";
+import { ReviewDashboard } from "@/widgets/code-review-surface";
+import { SiteHeader } from "@/widgets/site-header";
+import { Badge } from "@/shared/ui/badge";
+import { EmptyState } from "@/shared/ui/empty-state";
+import { Panel, PanelHeader } from "@/shared/ui/panel";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { listReviewWorkspaces } from "@/entities/database";
 
 export default async function Home() {
   const user = await getCurrentCodewalkUser();

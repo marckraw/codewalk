@@ -1,12 +1,11 @@
 import { notFound } from "next/navigation";
-import type { ReactNode } from "react";
-import { ReviewWorkspace } from "@/components/review/review-workspace";
-import { SiteHeader } from "@/components/site-header";
-import { Badge } from "@/components/ui/badge";
-import { Panel, PanelHeader } from "@/components/ui/panel";
-import { parseReviewDeepLink } from "@/components/review/review-deep-link.pure";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { getReviewWorkspace } from "@/lib/db/review-workspace";
+import { ReviewWorkspace } from "@/widgets/code-review-surface";
+import { Badge } from "@/shared/ui/badge";
+import { Panel, PanelHeader } from "@/shared/ui/panel";
+import { parseReviewDeepLink } from "@/widgets/code-review-surface";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { getReviewWorkspace } from "@/entities/database";
+import { ReviewSnapshotPageShell } from "./page-shell";
 
 type ReviewSnapshotSearchParams = {
   file?: string | string[];
@@ -31,7 +30,7 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
 
   if (user.status === "misconfigured") {
     return (
-      <Shell>
+      <ReviewSnapshotPageShell>
         <Panel className="mx-4 mt-4 max-w-2xl sm:mx-6">
           <PanelHeader
             actions={<Badge tone="warning">setup required</Badge>}
@@ -49,13 +48,13 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
             </ul>
           </div>
         </Panel>
-      </Shell>
+      </ReviewSnapshotPageShell>
     );
   }
 
   if (user.status === "signed-out") {
     return (
-      <Shell>
+      <ReviewSnapshotPageShell>
         <Panel className="mx-4 mt-4 max-w-2xl sm:mx-6">
           <PanelHeader
             actions={<Badge tone="warning">auth required</Badge>}
@@ -63,7 +62,7 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
             title="Protected review"
           />
         </Panel>
-      </Shell>
+      </ReviewSnapshotPageShell>
     );
   }
 
@@ -74,21 +73,12 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
   }
 
   return (
-    <Shell>
+    <ReviewSnapshotPageShell>
       <ReviewWorkspace
         autoGenerate={query.generate === "1"}
         deepLink={parseReviewDeepLink(query)}
         workspace={workspace}
       />
-    </Shell>
-  );
-}
-
-function Shell({ children }: { children: ReactNode }) {
-  return (
-    <main className="min-h-screen">
-      <SiteHeader />
-      {children}
-    </main>
+    </ReviewSnapshotPageShell>
   );
 }

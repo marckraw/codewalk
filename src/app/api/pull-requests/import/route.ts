@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
-import { upsertAuthenticatedUser } from "@/lib/db/users";
-import { parseGitHubPullRequestUrl } from "@/lib/github/pull-request-url";
-import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
-import { getGitHubAutomationConfig, isAllowedGitHubOwner } from "@/lib/github/server/config";
-import { GitHubClientError } from "@/lib/github/server/errors";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { persistPullRequestSnapshot } from "@/entities/database";
+import { upsertAuthenticatedUser } from "@/entities/database";
+import { parseGitHubPullRequestUrl } from "@/entities/github";
+import { createServerGitHubRestClient } from "@/entities/github-server";
+import { getGitHubAutomationConfig, isAllowedGitHubOwner } from "@/entities/github-server";
+import { GitHubClientError } from "@/entities/github-server";
 
 export async function POST(request: Request) {
   let body: unknown;

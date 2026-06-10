@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CodeReviewGuideGenerationError } from "@/lib/code-review-guide-generation";
+import { CodeReviewGuideGenerationError } from "@/features/code-review-guide-generation";
 import { POST } from "./route";
 
 vi.mock("server-only", () => ({}));
@@ -17,28 +17,27 @@ vi.mock("next/server", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/github/webhook", () => ({
-  extractGitHubWebhookJson: (input: { body: string }) => input.body,
-  getGitHubWebhookConfig: vi.fn(),
-  resolveGitHubPullRequestWebhook: vi.fn(),
-  verifyGitHubWebhookSignature: vi.fn(),
-}));
+vi.mock("@/entities/github-server", async () => {
+  const actual = await vi.importActual<typeof import("@/entities/github-server")>("@/entities/github-server");
 
-vi.mock("@/lib/github/server/bot-token", () => ({
-  createServerGitHubRestClient: vi.fn(),
-}));
+  return {
+    ...actual,
+    createServerGitHubRestClient: vi.fn(),
+    extractGitHubWebhookJson: (input: { body: string }) => input.body,
+    getGitHubWebhookConfig: vi.fn(),
+    resolveGitHubPullRequestWebhook: vi.fn(),
+    verifyGitHubWebhookSignature: vi.fn(),
+  };
+});
 
-vi.mock("@/lib/db/pull-request-snapshots", () => ({
+vi.mock("@/entities/database", () => ({
   persistPullRequestSnapshot: vi.fn(),
-}));
-
-vi.mock("@/lib/db/code-review-guide-generations", () => ({
   updateCodeReviewGuideGenerationComment: vi.fn(),
 }));
 
-vi.mock("@/lib/code-review-guide-generation", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/code-review-guide-generation")>(
-    "@/lib/code-review-guide-generation",
+vi.mock("@/features/code-review-guide-generation", async () => {
+  const actual = await vi.importActual<typeof import("@/features/code-review-guide-generation")>(
+    "@/features/code-review-guide-generation",
   );
 
   return {
@@ -47,15 +46,15 @@ vi.mock("@/lib/code-review-guide-generation", async () => {
   };
 });
 
-import { generateAndPersistCodeReviewGuide } from "@/lib/code-review-guide-generation";
-import { updateCodeReviewGuideGenerationComment } from "@/lib/db/code-review-guide-generations";
-import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
-import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
+import { generateAndPersistCodeReviewGuide } from "@/features/code-review-guide-generation";
+import { updateCodeReviewGuideGenerationComment } from "@/entities/database";
+import { persistPullRequestSnapshot } from "@/entities/database";
+import { createServerGitHubRestClient } from "@/entities/github-server";
 import {
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
   verifyGitHubWebhookSignature,
-} from "@/lib/github/webhook";
+} from "@/entities/github-server";
 
 describe("POST /api/github/webhooks", () => {
   beforeEach(() => {

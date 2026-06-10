@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-vi.mock("@/lib/auth/server", () => ({
+vi.mock("@/entities/auth-server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
 
-vi.mock("@/lib/agents-daemon/client", () => ({
+vi.mock("@/entities/agents-daemon", () => ({
   checkAgentsDaemonConnection: vi.fn(),
 }));
 
-import { checkAgentsDaemonConnection } from "@/lib/agents-daemon/client";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
+import { checkAgentsDaemonConnection } from "@/entities/agents-daemon";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
 
 describe("GET /api/agents-daemon/diagnostics", () => {
   beforeEach(() => {

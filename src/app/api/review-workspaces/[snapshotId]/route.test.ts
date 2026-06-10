@@ -1,16 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GET } from "./route";
 
-vi.mock("@/lib/auth/server", () => ({
+vi.mock("@/entities/auth-server", () => ({
   getCurrentCodewalkUser: vi.fn(),
 }));
 
-vi.mock("@/lib/db/review-workspace", () => ({
+vi.mock("@/entities/database", () => ({
   getReviewWorkspace: vi.fn(),
 }));
 
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { getReviewWorkspace } from "@/lib/db/review-workspace";
+import { getCurrentCodewalkUser } from "@/entities/auth-server";
+import { getReviewWorkspace } from "@/entities/database";
 
 function request() {
   return new Request("http://localhost/api/review-workspaces/snap-1");
