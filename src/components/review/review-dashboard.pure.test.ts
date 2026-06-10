@@ -19,6 +19,7 @@ function summary(overrides: Partial<ReviewWorkspaceSummary>): ReviewWorkspaceSum
     id: "snap-1",
     number: 1,
     owner: "ef-global",
+    prStatus: "ready_for_review",
     prState: "open",
     repo: "backpack",
     status: "ready",

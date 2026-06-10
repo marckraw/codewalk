@@ -48,6 +48,7 @@ function makeWorkspace(): ReviewWorkspaceModel {
         },
       ],
     },
+    prStatus: "ready_for_review",
     snapshot: {
       baseRef: "main",
       headRef: "feature",
