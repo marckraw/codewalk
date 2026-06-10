@@ -21,7 +21,12 @@ export default function RootLayout({
               try {
                 const theme = localStorage.getItem("codewalk-theme");
                 const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-                const shouldUseDark = theme ? theme === "dark" : prefersDark;
+                const shouldUseDark =
+                  theme === "dark"
+                    ? true
+                    : theme === "light"
+                      ? false
+                      : prefersDark;
                 document.documentElement.classList.toggle("dark", shouldUseDark);
                 document.documentElement.style.colorScheme = shouldUseDark ? "dark" : "light";
               } catch {}
