@@ -28,6 +28,7 @@ interface PierreDiffViewerProps<TAnnotation = undefined> {
   onSelectedLinesChange?: (range: SelectedLineRange | null) => void
   renderAnnotation?: (annotation: DiffLineAnnotation<TAnnotation>) => ReactNode
   selectedLines?: SelectedLineRange | null
+  showHeader?: boolean
   title?: string
 }
 
@@ -41,6 +42,7 @@ export function PierreDiffViewer<TAnnotation>({
   onSelectedLinesChange,
   renderAnnotation,
   selectedLines = null,
+  showHeader = true,
   title = 'Pull request diff',
 }: PierreDiffViewerProps<TAnnotation>) {
   const colorScheme = useAppColorScheme()
@@ -78,7 +80,7 @@ export function PierreDiffViewer<TAnnotation>({
   if (loading && !diff) {
     return (
       <div aria-busy="true" className="flex h-full min-h-0 flex-col">
-        {renderDiffHeader({ file, loading, title })}
+        {showHeader ? renderDiffHeader({ file, loading, title }) : null}
         <div className="app-scrollbar min-h-0 flex-1 overflow-auto bg-background/60">
           <div className="flex h-full min-h-32 items-center justify-center gap-2 p-3 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
@@ -132,7 +134,7 @@ export function PierreDiffViewer<TAnnotation>({
 
   return (
     <div aria-busy={loading} className="flex h-full min-h-0 flex-col">
-      {renderDiffHeader({ file, loading, title })}
+      {showHeader ? renderDiffHeader({ file, loading, title }) : null}
       <div className="app-scrollbar min-h-0 flex-1 overflow-auto bg-background/60">
         {diffContent ? (
           <PierreDiffErrorBoundary fallback={renderRawDiffFallback(diff, true)}>

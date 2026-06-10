@@ -39,6 +39,7 @@ export function GuideFileDiff({
           file={file.path}
           fileStatus={file.status}
           loading={loading}
+          showHeader={false}
           title="Guide section diff"
         />
       </div>
