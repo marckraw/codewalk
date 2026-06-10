@@ -4,7 +4,9 @@ import {
   filterReviewWorkspaceSummaries,
   formatAbsoluteReviewDate,
   formatRelativeReviewTime,
+  groupReviewWorkspacesByRecency,
   listReviewWorkspaceRepos,
+  reviewRecencyGroupLabel,
   reviewWorkspaceRepoKey,
 } from "./review-dashboard.pure";
 
@@ -124,6 +126,51 @@ describe("formatRelativeReviewTime", () => {
 
   it("accepts ISO strings", () => {
     expect(formatRelativeReviewTime("2026-06-09T12:00:00Z", new Date("2026-06-09T12:05:00Z"))).toBe("5m ago");
+  });
+});
+
+describe("reviewRecencyGroupLabel", () => {
+  // Local-time strings (no `Z`) keep the test deterministic across timezones.
+  const now = new Date("2026-06-10T15:00:00");
+
+  it("buckets relative to the viewer's local midnight", () => {
+    expect(reviewRecencyGroupLabel(new Date("2026-06-10T00:00:00"), now)).toBe("Today");
+    expect(reviewRecencyGroupLabel(new Date("2026-06-10T14:59:00"), now)).toBe("Today");
+    expect(reviewRecencyGroupLabel(new Date("2026-06-09T23:59:59"), now)).toBe("Yesterday");
+    expect(reviewRecencyGroupLabel(new Date("2026-06-09T00:00:00"), now)).toBe("Yesterday");
+    expect(reviewRecencyGroupLabel(new Date("2026-06-08T23:59:59"), now)).toBe("This week");
+    expect(reviewRecencyGroupLabel(new Date("2026-06-03T00:00:00"), now)).toBe("This week");
+    expect(reviewRecencyGroupLabel(new Date("2026-06-02T23:59:59"), now)).toBe("This month");
+    expect(reviewRecencyGroupLabel(new Date("2026-05-11T00:00:00"), now)).toBe("This month");
+    expect(reviewRecencyGroupLabel(new Date("2026-05-10T23:59:59"), now)).toBe("Older");
+  });
+
+  it("accepts ISO strings", () => {
+    expect(reviewRecencyGroupLabel("2026-06-10T01:00:00", now)).toBe("Today");
+  });
+});
+
+describe("groupReviewWorkspacesByRecency", () => {
+  const now = new Date("2026-06-10T15:00:00");
+
+  it("returns non-empty buckets in fixed order, preserving item order", () => {
+    const items = [
+      summary({ id: "today-1", updatedAt: new Date("2026-06-10T14:00:00") }),
+      summary({ id: "today-2", updatedAt: new Date("2026-06-10T09:00:00") }),
+      summary({ id: "week", updatedAt: new Date("2026-06-05T12:00:00") }),
+      summary({ id: "older", updatedAt: new Date("2026-01-15T12:00:00") }),
+    ];
+
+    const groups = groupReviewWorkspacesByRecency(items, now);
+
+    expect(groups.map((group) => group.label)).toEqual(["Today", "This week", "Older"]);
+    expect(groups[0].items.map((item) => item.id)).toEqual(["today-1", "today-2"]);
+    expect(groups[1].items.map((item) => item.id)).toEqual(["week"]);
+    expect(groups[2].items.map((item) => item.id)).toEqual(["older"]);
+  });
+
+  it("returns no groups for an empty list", () => {
+    expect(groupReviewWorkspacesByRecency([], now)).toEqual([]);
   });
 });
 
