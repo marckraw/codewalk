@@ -3,21 +3,24 @@ import {
   CodeReviewGuideGenerationError,
   generateAndPersistCodeReviewGuide,
 } from "@/features/code-review-guide-generation";
-import { updateCodeReviewGuideGenerationComment } from "@/entities/database";
-import { persistPullRequestSnapshot } from "@/entities/database";
+import {
+  listRepositoryReviewRules,
+  persistPullRequestSnapshot,
+  updateCodeReviewGuideGenerationComment,
+} from "@/entities/database";
+import { evaluateRepositoryReviewAccess } from "@/entities/github";
 import {
   buildCodewalkReviewCommentBody,
   buildCodewalkReviewUrl,
   getCodewalkAppBaseUrl,
   upsertCodewalkReviewComment,
   type CodewalkReviewCommentState,
-} from "@/entities/github-server";
-import { createServerGitHubRestClient } from "@/entities/github-server";
-import { GitHubClientError } from "@/entities/github-server";
-import {
+  createServerGitHubRestClient,
   extractGitHubWebhookJson,
+  GitHubClientError,
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
+  shouldGenerateGuideForPullRequestWebhookAction,
   verifyGitHubWebhookSignature,
 } from "@/entities/github-server";
 import { logCodewalkError, logCodewalkEvent, logCodewalkWarning } from "@/shared/lib/observability";
@@ -67,7 +70,6 @@ export async function POST(request: Request) {
   }
 
   const resolved = resolveGitHubPullRequestWebhook({
-    allowedOwner: config.allowedOwner,
     event: request.headers.get("x-github-event"),
     payload,
   });
@@ -81,6 +83,23 @@ export async function POST(request: Request) {
   }
 
   try {
+    const access = evaluateRepositoryReviewAccess({
+      allowedOwner: config.allowedOwner,
+      owner: resolved.pullRequest.owner,
+      repo: resolved.pullRequest.repo,
+      rules: await listRepositoryReviewRules(),
+    });
+
+    if (!access.allowed) {
+      logCodewalkEvent("codewalk.github_webhook.ignored", {
+        event: request.headers.get("x-github-event"),
+        owner: resolved.pullRequest.owner,
+        reason: access.reason,
+        repo: resolved.pullRequest.repo,
+      });
+      return NextResponse.json({ reason: access.reason, status: "ignored" }, { status: 202 });
+    }
+
     logCodewalkEvent("codewalk.github_webhook.accepted", {
       action: resolved.action,
       owner: resolved.pullRequest.owner,
@@ -100,6 +119,22 @@ export async function POST(request: Request) {
       repo: persistedSnapshot.repo,
       snapshotId: persistedSnapshot.id,
     });
+
+    if (!shouldGenerateGuideForPullRequestWebhookAction(resolved.action)) {
+      return NextResponse.json(
+        {
+          snapshot: {
+            headSha: persistedSnapshot.headSha,
+            id: persistedSnapshot.id,
+            number: persistedSnapshot.number,
+            owner: persistedSnapshot.owner,
+            repo: persistedSnapshot.repo,
+          },
+          status: "refreshed",
+        },
+        { status: 202 },
+      );
+    }
 
     const preparingComment = await postReviewComment({
       existingCommentId: null,

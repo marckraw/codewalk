@@ -10,6 +10,7 @@ vi.mock("@/entities/auth-server", () => ({
 }));
 
 vi.mock("@/entities/database", () => ({
+  listRepositoryReviewRules: vi.fn(),
   persistPullRequestSnapshot: vi.fn(),
   upsertAuthenticatedUser: vi.fn(),
 }));
@@ -27,10 +28,12 @@ vi.mock("@/entities/github-server", async () => {
 });
 
 import { getCurrentCodewalkUser } from "@/entities/auth-server";
-import { persistPullRequestSnapshot } from "@/entities/database";
-import { upsertAuthenticatedUser } from "@/entities/database";
-import { createServerGitHubRestClient } from "@/entities/github-server";
-import { getGitHubAutomationConfig } from "@/entities/github-server";
+import {
+  listRepositoryReviewRules,
+  persistPullRequestSnapshot,
+  upsertAuthenticatedUser,
+} from "@/entities/database";
+import { createServerGitHubRestClient, getGitHubAutomationConfig } from "@/entities/github-server";
 
 describe("POST /api/pull-requests/import", () => {
   beforeEach(() => {
@@ -42,6 +45,7 @@ describe("POST /api/pull-requests/import", () => {
       userId: "clerk-user-id",
     });
     vi.mocked(upsertAuthenticatedUser).mockResolvedValue({ id: "db-user-id" } as never);
+    vi.mocked(listRepositoryReviewRules).mockResolvedValue([]);
     vi.mocked(getGitHubAutomationConfig).mockReturnValue({
       allowedOwner: "openai",
       botToken: "gh-bot-token",
@@ -121,7 +125,7 @@ describe("POST /api/pull-requests/import", () => {
     });
   });
 
-  it("limits manual imports to the configured GitHub owner", async () => {
+  it("limits manual imports to the configured GitHub owner and whitelisted repos", async () => {
     vi.mocked(getGitHubAutomationConfig).mockReturnValue({
       allowedOwner: "ef-global",
       botToken: "gh-bot-token",
@@ -132,7 +136,43 @@ describe("POST /api/pull-requests/import", () => {
 
     expect(response.status).toBe(403);
     await expect(response.json()).resolves.toEqual({
-      error: "Codewalk can only import pull requests from ef-global.",
+      error:
+        "Codewalk only imports pull requests from ef-global or whitelisted repositories. Add openai/codex in Settings first.",
+    });
+    expect(createServerGitHubRestClient).not.toHaveBeenCalled();
+  });
+
+  it("imports whitelisted repositories outside the configured owner", async () => {
+    vi.mocked(getGitHubAutomationConfig).mockReturnValue({
+      allowedOwner: "ef-global",
+      botToken: "gh-bot-token",
+      ok: true,
+    });
+    vi.mocked(listRepositoryReviewRules).mockResolvedValue([
+      { owner: "openai", repo: "codex", rule: "allow" } as never,
+    ]);
+
+    const response = await POST(jsonRequest({ url: "https://github.com/openai/codex/pull/24" }));
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ status: "imported" });
+  });
+
+  it("rejects blocklisted repositories inside the configured owner", async () => {
+    vi.mocked(getGitHubAutomationConfig).mockReturnValue({
+      allowedOwner: "openai",
+      botToken: "gh-bot-token",
+      ok: true,
+    });
+    vi.mocked(listRepositoryReviewRules).mockResolvedValue([
+      { owner: "openai", repo: "codex", rule: "block" } as never,
+    ]);
+
+    const response = await POST(jsonRequest({ url: "https://github.com/openai/codex/pull/24" }));
+
+    expect(response.status).toBe(403);
+    await expect(response.json()).resolves.toEqual({
+      error: "Guided reviews are blocked for openai/codex. Remove the block rule in Settings to import it.",
     });
     expect(createServerGitHubRestClient).not.toHaveBeenCalled();
   });

@@ -1,11 +1,16 @@
 import { NextResponse } from "next/server";
 import { getCurrentCodewalkUser } from "@/entities/auth-server";
-import { persistPullRequestSnapshot } from "@/entities/database";
-import { upsertAuthenticatedUser } from "@/entities/database";
-import { parseGitHubPullRequestUrl } from "@/entities/github";
-import { createServerGitHubRestClient } from "@/entities/github-server";
-import { getGitHubAutomationConfig, isAllowedGitHubOwner } from "@/entities/github-server";
-import { GitHubClientError } from "@/entities/github-server";
+import {
+  listRepositoryReviewRules,
+  persistPullRequestSnapshot,
+  upsertAuthenticatedUser,
+} from "@/entities/database";
+import { evaluateRepositoryReviewAccess, parseGitHubPullRequestUrl } from "@/entities/github";
+import {
+  createServerGitHubRestClient,
+  getGitHubAutomationConfig,
+  GitHubClientError,
+} from "@/entities/github-server";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -50,14 +55,22 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!isAllowedGitHubOwner(parsed.pullRequest.owner, githubConfig.allowedOwner)) {
-    return NextResponse.json(
-      { error: `Codewalk can only import pull requests from ${githubConfig.allowedOwner}.` },
-      { status: 403 },
-    );
-  }
-
   try {
+    const access = evaluateRepositoryReviewAccess({
+      allowedOwner: githubConfig.allowedOwner,
+      owner: parsed.pullRequest.owner,
+      repo: parsed.pullRequest.repo,
+      rules: await listRepositoryReviewRules(),
+    });
+
+    if (!access.allowed) {
+      const error =
+        access.reason === "blocklisted"
+          ? `Guided reviews are blocked for ${parsed.pullRequest.owner}/${parsed.pullRequest.repo}. Remove the block rule in Settings to import it.`
+          : `Codewalk only imports pull requests from ${githubConfig.allowedOwner} or whitelisted repositories. Add ${parsed.pullRequest.owner}/${parsed.pullRequest.repo} in Settings first.`;
+      return NextResponse.json({ error }, { status: 403 });
+    }
+
     const user = await upsertAuthenticatedUser({
       clerkUserId: currentUser.userId,
       email: currentUser.email,

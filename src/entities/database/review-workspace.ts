@@ -1,6 +1,7 @@
 import "server-only";
 
 import { asc, count, desc, eq, inArray } from "drizzle-orm";
+import { derivePullRequestLifecycleStatus, type PullRequestLifecycleStatus } from "@/entities/github";
 import { getDb } from "./client";
 import {
   codeReviewGuideGenerations,
@@ -29,6 +30,7 @@ export type ReviewWorkspaceData = {
   files: Array<typeof pullRequestFiles.$inferSelect>;
   generation: CodeReviewGuideGenerationRow | null;
   guide: ReviewWorkspaceGuide | null;
+  prStatus: PullRequestLifecycleStatus;
   snapshot: typeof pullRequestSnapshots.$inferSelect;
   state: ReviewWorkspaceState;
 };
@@ -90,6 +92,7 @@ export type ReviewWorkspaceSummary = {
   id: string;
   number: number;
   owner: string;
+  prStatus: PullRequestLifecycleStatus;
   prState: string;
   repo: string;
   status: ReviewWorkspaceState;
@@ -156,6 +159,7 @@ export async function listReviewWorkspaces(input?: { limit?: number }): Promise<
       id: snapshot.id,
       number: snapshot.number,
       owner: snapshot.owner,
+      prStatus: derivePullRequestLifecycleStatus(snapshot),
       prState: snapshot.state,
       repo: snapshot.repo,
       status: deriveReviewWorkspaceState({ generation, guide }),
@@ -196,6 +200,7 @@ export async function getReviewWorkspace(snapshotId: string): Promise<ReviewWork
     files,
     generation,
     guide,
+    prStatus: derivePullRequestLifecycleStatus(snapshot),
     snapshot,
     state: deriveReviewWorkspaceState({
       generation,

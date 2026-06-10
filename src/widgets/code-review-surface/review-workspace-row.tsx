@@ -4,6 +4,7 @@ import { CodeReviewGuideGenerationControl } from "@/features/code-review-guide-g
 import { Badge } from "@/shared/ui/badge";
 import { Button } from "@/shared/ui/button";
 import type { ReviewWorkspaceState, ReviewWorkspaceSummary } from "@/entities/database";
+import { PullRequestStatusBadge } from "./pull-request-status-badge";
 import { formatAbsoluteReviewDate, formatRelativeReviewTime } from "./review-dashboard.pure";
 
 const STATUS_TONE: Record<ReviewWorkspaceState, "success" | "warning" | "danger" | "muted"> = {
@@ -29,6 +30,7 @@ export function ReviewWorkspaceRow({ item, now }: { item: ReviewWorkspaceSummary
       >
         <div className="flex min-w-0 items-center gap-2">
           <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
+          <PullRequestStatusBadge status={item.prStatus} />
           <span className="truncate font-mono text-xs text-[var(--muted)]">
             {item.owner}/{item.repo} #{item.number}
           </span>

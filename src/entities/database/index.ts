@@ -2,6 +2,7 @@ export * from "./client";
 export * from "./code-review-guide-generations";
 export * from "./code-review-guides";
 export * from "./pull-request-snapshots";
+export * from "./repository-review-rules";
 export * from "./review-workspace";
 export * from "./schema";
 export * from "./users";

@@ -1,28 +1,30 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ReviewWorkspace } from "@/widgets/code-review-surface";
 import { Badge } from "@/shared/ui/badge";
 import { Panel, PanelHeader } from "@/shared/ui/panel";
 import { parseReviewDeepLink } from "@/widgets/code-review-surface";
 import { getCurrentCodewalkUser } from "@/entities/auth-server";
-import { getReviewWorkspace } from "@/entities/database";
-import { ReviewSnapshotPageShell } from "./page-shell";
+import { getLatestPullRequestSnapshotByRef, getReviewWorkspace } from "@/entities/database";
+import { parseGitHubPullRequestUrl } from "@/entities/github";
+import { ReviewSnapshotPageShell } from "../page-shell";
 
-type ReviewSnapshotSearchParams = {
+type ReviewSnapshotSearchParams = Record<string, string | string[] | undefined> & {
   file?: string | string[];
-  generate?: string;
+  generate?: string | string[];
   section?: string | string[];
   view?: string | string[];
 };
 
 type ReviewSnapshotPageProps = {
   params: Promise<{
+    reviewAlias?: string[];
     snapshotId: string;
   }>;
   searchParams?: Promise<ReviewSnapshotSearchParams>;
 };
 
 export default async function ReviewSnapshotPage({ params, searchParams }: ReviewSnapshotPageProps) {
-  const [{ snapshotId }, query, user] = await Promise.all([
+  const [routeParams, query, user] = await Promise.all([
     params,
     searchParams ?? Promise.resolve({} as ReviewSnapshotSearchParams),
     getCurrentCodewalkUser(),
@@ -66,6 +68,12 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
     );
   }
 
+  if (routeParams.reviewAlias && routeParams.reviewAlias.length > 0) {
+    const snapshotId = await resolvePullRequestAliasSnapshotId(routeParams);
+    redirect(buildReviewPullRequestAliasRedirectPath({ searchParams: query, snapshotId }));
+  }
+
+  const { snapshotId } = routeParams;
   const workspace = await getReviewWorkspace(snapshotId);
 
   if (!workspace) {
@@ -81,4 +89,54 @@ export default async function ReviewSnapshotPage({ params, searchParams }: Revie
       />
     </ReviewSnapshotPageShell>
   );
+}
+
+async function resolvePullRequestAliasSnapshotId(input: { reviewAlias?: string[]; snapshotId: string }) {
+  const [repo, pullSegment, number, ...rest] = input.reviewAlias ?? [];
+
+  if (!repo || pullSegment !== "pull" || !number || rest.length > 0) {
+    notFound();
+  }
+
+  const parsed = parseGitHubPullRequestUrl(
+    `https://github.com/${encodeURIComponent(input.snapshotId)}/${encodeURIComponent(repo)}/pull/${number}`,
+  );
+
+  if (!parsed.ok) {
+    notFound();
+  }
+
+  const snapshot = await getLatestPullRequestSnapshotByRef(parsed.pullRequest);
+
+  if (!snapshot) {
+    notFound();
+  }
+
+  return snapshot.id;
+}
+
+export function buildReviewPullRequestAliasRedirectPath(input: {
+  searchParams: ReviewSnapshotSearchParams;
+  snapshotId: string;
+}) {
+  const params = new URLSearchParams();
+
+  for (const [key, value] of Object.entries(input.searchParams)) {
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        params.append(key, item);
+      }
+      continue;
+    }
+
+    if (value !== undefined) {
+      params.set(key, value);
+    }
+  }
+
+  if (!params.has("view")) {
+    params.set("view", "guide");
+  }
+
+  return `/review/${encodeURIComponent(input.snapshotId)}?${params.toString()}`;
 }

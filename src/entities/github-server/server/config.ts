@@ -44,7 +44,3 @@ export function getGitHubAutomationConfig(
     ok: true,
   };
 }
-
-export function isAllowedGitHubOwner(owner: string, allowedOwner: string) {
-  return owner.toLowerCase() === allowedOwner.toLowerCase();
-}

@@ -48,7 +48,10 @@ export function normalizeReviewSearchQuery(query: string): string {
  * remember: title, owner/repo, PR number (`186` or `#186`), branches, author.
  */
 export function matchesReviewSearchQuery(
-  item: Pick<ReviewWorkspaceSummary, "authorLogin" | "baseRef" | "headRef" | "number" | "owner" | "repo" | "title">,
+  item: Pick<
+    ReviewWorkspaceSummary,
+    "authorLogin" | "baseRef" | "headRef" | "number" | "owner" | "prStatus" | "repo" | "title"
+  >,
   normalizedQuery: string,
 ): boolean {
   if (!normalizedQuery) {
@@ -61,6 +64,7 @@ export function matchesReviewSearchQuery(
     `#${item.number}`,
     item.baseRef,
     item.headRef,
+    item.prStatus.replaceAll("_", " "),
     item.authorLogin ?? "",
   ]
     .join(" ")
