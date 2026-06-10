@@ -1,6 +1,6 @@
 {
-  "id": "f88657bf-402b-4be5-811e-c8af9bcca93f",
-  "prevId": "f7da4350-8652-4349-a7e3-c59dfc14df6e",
+  "id": "7b030713-4c38-49b3-adb5-22de48032b77",
+  "prevId": "f88657bf-402b-4be5-811e-c8af9bcca93f",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1081,6 +1081,19 @@
           "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true
+        },
+        "draft": {
+          "name": "draft",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "merged_at": {
+          "name": "merged_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         },
         "url": {
           "name": "url",

@@ -36,6 +36,8 @@ export const codeReviewGuideGenerationStatus = pgEnum("code_review_guide_generat
 
 export const guideRiskLevel = pgEnum("guide_risk_level", ["low", "medium", "high"]);
 
+export const repositoryReviewRuleType = pgEnum("repository_review_rule_type", ["allow", "block"]);
+
 export const noteAnchorType = pgEnum("note_anchor_type", ["guide_section", "file", "diff_range"]);
 
 export const reviewProgressTargetType = pgEnum("review_progress_target_type", ["guide_section", "file"]);
@@ -52,6 +54,22 @@ export const users = pgTable(
   },
   (table) => ({
     clerkUserIdIdx: uniqueIndex("users_clerk_user_id_idx").on(table.clerkUserId),
+  }),
+);
+
+export const repositoryReviewRules = pgTable(
+  "repository_review_rules",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    owner: varchar("owner", { length: 191 }).notNull(),
+    repo: varchar("repo", { length: 191 }).notNull(),
+    rule: repositoryReviewRuleType("rule").notNull(),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => ({
+    repoIdx: uniqueIndex("repository_review_rules_repo_idx").on(table.owner, table.repo),
   }),
 );
 
@@ -313,6 +331,9 @@ export type CodeReviewGuidePullRequestMetadata = {
   headRepositoryOwner: string | null;
   headRepositoryName: string | null;
 };
+
+export type RepositoryReviewRuleType = "allow" | "block";
+export type RepositoryReviewRuleRow = typeof repositoryReviewRules.$inferSelect;
 
 export type CodeReviewGuideRow = typeof guides.$inferSelect;
 export type CodeReviewGuideSectionRow = typeof guideSections.$inferSelect;

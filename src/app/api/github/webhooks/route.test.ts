@@ -35,6 +35,10 @@ vi.mock("@/lib/db/pull-request-snapshots", () => ({
   persistPullRequestSnapshot: vi.fn(),
 }));
 
+vi.mock("@/lib/db/repository-review-rules", () => ({
+  listRepositoryReviewRules: vi.fn(),
+}));
+
 vi.mock("@/lib/db/code-review-guide-generations", () => ({
   updateCodeReviewGuideGenerationComment: vi.fn(),
 }));
@@ -53,6 +57,7 @@ vi.mock("@/lib/code-review-guide-generation", async () => {
 import { generateAndPersistCodeReviewGuide } from "@/lib/code-review-guide-generation";
 import { updateCodeReviewGuideGenerationComment } from "@/lib/db/code-review-guide-generations";
 import { persistPullRequestSnapshot } from "@/lib/db/pull-request-snapshots";
+import { listRepositoryReviewRules } from "@/lib/db/repository-review-rules";
 import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
 import {
   getGitHubWebhookConfig,
@@ -72,6 +77,7 @@ describe("POST /api/github/webhooks", () => {
       secret: "webhook-secret",
     });
     vi.mocked(verifyGitHubWebhookSignature).mockReturnValue(true);
+    vi.mocked(listRepositoryReviewRules).mockResolvedValue([]);
     vi.mocked(resolveGitHubPullRequestWebhook).mockReturnValue({
       action: "opened",
       ok: true,
@@ -189,6 +195,49 @@ describe("POST /api/github/webhooks", () => {
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({ reason: "ignored-action", status: "ignored" });
     expect(createServerGitHubRestClient).not.toHaveBeenCalled();
+  });
+
+  it("ignores repositories outside the allowed owner unless whitelisted", async () => {
+    vi.mocked(resolveGitHubPullRequestWebhook).mockReturnValue({
+      action: "opened",
+      ok: true,
+      pullRequest: { number: 7, owner: "other-org", repo: "external" },
+    });
+
+    const response = await POST(githubWebhookRequest({ action: "opened" }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ reason: "not-allowlisted", status: "ignored" });
+    expect(persistPullRequestSnapshot).not.toHaveBeenCalled();
+  });
+
+  it("accepts whitelisted repositories outside the allowed owner", async () => {
+    vi.mocked(resolveGitHubPullRequestWebhook).mockReturnValue({
+      action: "opened",
+      ok: true,
+      pullRequest: { number: 7, owner: "other-org", repo: "external" },
+    });
+    vi.mocked(listRepositoryReviewRules).mockResolvedValue([
+      { owner: "other-org", repo: "external", rule: "allow" } as never,
+    ]);
+
+    const response = await POST(githubWebhookRequest({ action: "opened" }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toMatchObject({ status: "queued" });
+    expect(persistPullRequestSnapshot).toHaveBeenCalled();
+  });
+
+  it("ignores blocklisted repositories inside the allowed owner", async () => {
+    vi.mocked(listRepositoryReviewRules).mockResolvedValue([
+      { owner: "ef-global", repo: "example", rule: "block" } as never,
+    ]);
+
+    const response = await POST(githubWebhookRequest({ action: "opened" }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({ reason: "blocklisted", status: "ignored" });
+    expect(persistPullRequestSnapshot).not.toHaveBeenCalled();
   });
 
   it("refreshes lifecycle-only PR webhooks without queuing guide generation", async () => {
