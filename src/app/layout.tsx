@@ -1,16 +1,16 @@
-import type { Metadata } from "next";
-import { AuthProvider } from "@/components/auth/auth-provider";
-import "./globals.css";
+import type { Metadata } from 'next'
+import { AuthProvider } from '@/features/auth'
+import './globals.css'
 
 export const metadata: Metadata = {
-  title: "Codewalk",
-  description: "Guided pull request review.",
-};
+  title: 'Codewalk',
+  description: 'Guided pull request review.',
+}
 
 export default function RootLayout({
   children,
 }: Readonly<{
-  children: React.ReactNode;
+  children: React.ReactNode
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
@@ -33,5 +33,5 @@ export default function RootLayout({
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>
-  );
+  )
 }

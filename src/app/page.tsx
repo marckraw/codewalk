@@ -1,23 +1,23 @@
-import { OpenPullRequestDialog } from "@/components/open-pull-request-dialog";
-import { ReviewDashboard } from "@/components/review/review-dashboard";
-import { SiteHeader } from "@/components/site-header";
-import { Badge } from "@/components/ui/badge";
-import { EmptyState } from "@/components/ui/empty-state";
-import { Panel, PanelHeader } from "@/components/ui/panel";
-import { getCurrentCodewalkUser } from "@/lib/auth/server";
-import { listReviewWorkspaces } from "@/lib/db/review-workspace";
+import { OpenPullRequestDialog } from '@/features/pull-request-import'
+import { ReviewDashboard } from '@/widgets/code-review-surface'
+import { SiteHeader } from '@/widgets/site-header'
+import { Badge } from '@/shared/ui/badge'
+import { EmptyState } from '@/shared/ui/empty-state'
+import { Panel, PanelHeader } from '@/shared/ui/panel'
+import { getCurrentCodewalkUser } from '@/entities/auth-server'
+import { listReviewWorkspaces } from '@/entities/database'
 
 export default async function Home() {
-  const user = await getCurrentCodewalkUser();
-  const isAuthenticated = user.status === "authenticated";
-  const workspaces = isAuthenticated ? await listReviewWorkspaces() : [];
+  const user = await getCurrentCodewalkUser()
+  const isAuthenticated = user.status === 'authenticated'
+  const workspaces = isAuthenticated ? await listReviewWorkspaces() : []
 
   return (
     <main className="min-h-screen">
       <SiteHeader />
 
       <section className="px-4 py-4 sm:px-6">
-        {user.status === "misconfigured" ? (
+        {user.status === 'misconfigured' ? (
           <Panel className="max-w-2xl">
             <PanelHeader
               actions={<Badge tone="warning">setup required</Badge>}
@@ -25,7 +25,10 @@ export default async function Home() {
               title="Clerk configuration missing"
             />
             <div className="grid gap-3 p-4 text-sm">
-              <p className="text-[var(--muted)]">Add the missing keys to `.env.local`, then restart the development server.</p>
+              <p className="text-[var(--muted)]">
+                Add the missing keys to `.env.local`, then restart the
+                development server.
+              </p>
               <ul className="list-inside list-disc font-mono text-xs text-[var(--foreground)]">
                 {user.missingKeys.map((key) => (
                   <li key={key}>{key}</li>
@@ -76,5 +79,5 @@ export default async function Home() {
         )}
       </section>
     </main>
-  );
+  )
 }
