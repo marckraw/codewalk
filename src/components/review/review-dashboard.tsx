@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
 import { cn } from "@/lib/cn";
 import type { ReviewWorkspaceState, ReviewWorkspaceSummary } from "@/lib/db/review-workspace";
+import { PullRequestStatusBadge } from "./pull-request-status-badge";
 import { REVIEW_WORKSPACE_POLL_INTERVAL_MS } from "./use-review-workspace-live.pure";
 import {
   filterReviewWorkspaceSummaries,
@@ -188,6 +189,7 @@ function ReviewWorkspaceRow({ item, now }: { item: ReviewWorkspaceSummary; now: 
       >
         <div className="flex min-w-0 items-center gap-2">
           <Badge tone={STATUS_TONE[item.status]}>{STATUS_LABEL[item.status]}</Badge>
+          <PullRequestStatusBadge status={item.prStatus} />
           <span className="truncate font-mono text-xs text-[var(--muted)]">
             {item.owner}/{item.repo} #{item.number}
           </span>
