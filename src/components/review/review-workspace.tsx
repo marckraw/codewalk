@@ -9,6 +9,7 @@ import { GuidePreparingPane, GuideRail } from "./guide-rail";
 import { GuideView } from "./guide-view";
 import { ModeButton } from "./mode-button";
 import { PierreDiffViewer } from "./pierre-diff-viewer";
+import { PullRequestStatusBadge } from "./pull-request-status-badge";
 import type { ReviewFile, ReviewMode, ReviewWorkspace as ReviewWorkspaceModel } from "./review-types";
 import type { ReviewDeepLink } from "./review-deep-link.pure";
 import { buildReviewDeepLinkQuery } from "./review-deep-link.pure";
@@ -228,6 +229,7 @@ export function ReviewWorkspace({ autoGenerate, deepLink = EMPTY_DEEP_LINK, work
           </div>
           <Badge tone="success">{workspace.files.length} files</Badge>
           {workspace.guide ? <Badge tone="warning">{workspace.guide.sections.length} sections</Badge> : null}
+          <PullRequestStatusBadge status={workspace.prStatus} />
           <WorkspaceStatusBadge workspace={workspace} />
           <Button asChild className="h-8 gap-1.5 px-2 text-xs" size="sm" variant="outline">
             <a href={workspace.snapshot.url} rel="noreferrer" target="_blank">

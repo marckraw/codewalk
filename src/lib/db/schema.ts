@@ -64,6 +64,8 @@ export const pullRequestSnapshots = pgTable(
     number: integer("number").notNull(),
     title: text("title").notNull(),
     state: varchar("state", { length: 32 }).notNull(),
+    draft: boolean("draft").default(false).notNull(),
+    mergedAt: timestamp("merged_at", { withTimezone: true }),
     url: text("url").notNull(),
     baseRef: varchar("base_ref", { length: 255 }).notNull(),
     baseSha: varchar("base_sha", { length: 64 }).notNull(),

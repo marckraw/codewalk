@@ -21,6 +21,9 @@ vi.mock("@/lib/github/webhook", () => ({
   extractGitHubWebhookJson: (input: { body: string }) => input.body,
   getGitHubWebhookConfig: vi.fn(),
   resolveGitHubPullRequestWebhook: vi.fn(),
+  shouldGenerateGuideForPullRequestWebhookAction: vi.fn((action: string) =>
+    ["opened", "reopened", "synchronize", "ready_for_review"].includes(action),
+  ),
   verifyGitHubWebhookSignature: vi.fn(),
 }));
 
@@ -54,6 +57,7 @@ import { createServerGitHubRestClient } from "@/lib/github/server/bot-token";
 import {
   getGitHubWebhookConfig,
   resolveGitHubPullRequestWebhook,
+  shouldGenerateGuideForPullRequestWebhookAction,
   verifyGitHubWebhookSignature,
 } from "@/lib/github/webhook";
 
@@ -185,6 +189,37 @@ describe("POST /api/github/webhooks", () => {
     expect(response.status).toBe(202);
     await expect(response.json()).resolves.toEqual({ reason: "ignored-action", status: "ignored" });
     expect(createServerGitHubRestClient).not.toHaveBeenCalled();
+  });
+
+  it("refreshes lifecycle-only PR webhooks without queuing guide generation", async () => {
+    vi.mocked(resolveGitHubPullRequestWebhook).mockReturnValue({
+      action: "closed",
+      ok: true,
+      pullRequest: { number: 42, owner: "ef-global", repo: "example" },
+    });
+
+    const response = await POST(githubWebhookRequest({ action: "closed" }));
+
+    expect(response.status).toBe(202);
+    await expect(response.json()).resolves.toEqual({
+      snapshot: {
+        headSha: "head-sha",
+        id: "snapshot-id",
+        number: 42,
+        owner: "ef-global",
+        repo: "example",
+      },
+      status: "refreshed",
+    });
+    expect(shouldGenerateGuideForPullRequestWebhookAction).toHaveBeenCalledWith("closed");
+    expect(persistPullRequestSnapshot).toHaveBeenCalledWith({
+      importedByUserId: null,
+      snapshot: fixtureSnapshot,
+    });
+    expect(afterTasks).toHaveLength(0);
+    const github = vi.mocked(createServerGitHubRestClient).mock.results[0]?.value;
+    expect(github.createIssueComment).not.toHaveBeenCalled();
+    expect(generateAndPersistCodeReviewGuide).not.toHaveBeenCalled();
   });
 
   it("acknowledges generation failures after persisting the snapshot", async () => {
