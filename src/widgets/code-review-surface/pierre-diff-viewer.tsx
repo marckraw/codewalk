@@ -14,6 +14,10 @@ import {
 } from '@pierre/diffs/react'
 import { Loader2 } from 'lucide-react'
 import { useAppColorScheme } from './use-app-color-scheme'
+import {
+  DiffFileHeader,
+  type DiffFileHeaderSubtitleVariant,
+} from './diff-file-header.presentational'
 import { PierreDiffErrorBoundary } from './pierre-diff-error-boundary'
 import { planPierreDiffPerformance } from './pierre-diff-performance.pure'
 import { describeMissingPierrePatch } from './pierre-diff-viewer.pure'
@@ -28,7 +32,9 @@ interface PierreDiffViewerProps<TAnnotation = undefined> {
   onSelectedLinesChange?: (range: SelectedLineRange | null) => void
   renderAnnotation?: (annotation: DiffLineAnnotation<TAnnotation>) => ReactNode
   selectedLines?: SelectedLineRange | null
-  showHeader?: boolean
+  status?: string | null
+  subtitle?: string
+  subtitleVariant?: DiffFileHeaderSubtitleVariant
   title?: string
 }
 
@@ -42,7 +48,9 @@ export function PierreDiffViewer<TAnnotation>({
   onSelectedLinesChange,
   renderAnnotation,
   selectedLines = null,
-  showHeader = true,
+  status = null,
+  subtitle,
+  subtitleVariant = 'label',
   title = 'Pull request diff',
 }: PierreDiffViewerProps<TAnnotation>) {
   const colorScheme = useAppColorScheme()
@@ -77,10 +85,18 @@ export function PierreDiffViewer<TAnnotation>({
     )
   }
 
+  const resolvedSubtitle = subtitle ?? title
+
   if (loading && !diff) {
     return (
       <div aria-busy="true" className="flex h-full min-h-0 flex-col">
-        {showHeader ? renderDiffHeader({ file, loading, title }) : null}
+        <DiffFileHeader
+          loading={loading}
+          path={file}
+          status={status}
+          subtitle={resolvedSubtitle}
+          subtitleVariant={subtitleVariant}
+        />
         <div className="app-scrollbar min-h-0 flex-1 overflow-auto bg-background/60">
           <div className="flex h-full min-h-32 items-center justify-center gap-2 p-3 text-xs text-muted-foreground">
             <Loader2 className="size-3.5 animate-spin" />
@@ -134,7 +150,13 @@ export function PierreDiffViewer<TAnnotation>({
 
   return (
     <div aria-busy={loading} className="flex h-full min-h-0 flex-col">
-      {showHeader ? renderDiffHeader({ file, loading, title }) : null}
+      <DiffFileHeader
+        loading={loading}
+        path={file}
+        status={status}
+        subtitle={resolvedSubtitle}
+        subtitleVariant={subtitleVariant}
+      />
       <div className="app-scrollbar min-h-0 flex-1 overflow-auto bg-background/60">
         {diffContent ? (
           <PierreDiffErrorBoundary fallback={renderRawDiffFallback(diff, true)}>
@@ -168,35 +190,6 @@ function renderRawDiffFallback(diff: string, afterError: boolean) {
 }
 
 export type { PierreDiffViewerProps }
-
-function renderDiffHeader({
-  file,
-  loading = false,
-  title,
-}: {
-  file: string
-  loading?: boolean
-  title: string
-}) {
-  return (
-    <div className="shrink-0 border-b border-border px-3 py-2">
-      <div className="flex min-w-0 items-center gap-2">
-        <p
-          className="min-w-0 flex-1 truncate font-mono text-[11px] text-foreground"
-          title={file}
-        >
-          {file}
-        </p>
-        {loading ? (
-          <Loader2 className="size-3.5 shrink-0 animate-spin text-muted-foreground" />
-        ) : null}
-      </div>
-      <p className="mt-1 text-[10px] text-muted-foreground uppercase tracking-wider">
-        {title}
-      </p>
-    </div>
-  )
-}
 
 function renderPierreDiffPerformanceShell({
   children,
