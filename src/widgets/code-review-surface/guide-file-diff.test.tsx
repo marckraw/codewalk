@@ -5,19 +5,23 @@ import { GuideFileDiff } from './guide-file-diff'
 vi.mock('./pierre-diff-viewer', () => ({
   PierreDiffViewer: ({
     file,
-    showHeader = true,
+    status,
+    subtitle,
   }: {
     file: string | null
-    showHeader?: boolean
+    status?: string | null
+    subtitle?: string
   }) => (
     <div data-testid="embedded-diff">
-      {showHeader && file ? <div>{file}</div> : null}
+      {file ? <div>{file}</div> : null}
+      {status ? <div>{status}</div> : null}
+      {subtitle ? <div>{subtitle}</div> : null}
     </div>
   ),
 }))
 
 describe('GuideFileDiff', () => {
-  it('uses the guide card header as the only file header', () => {
+  it('renders guide metadata through the shared diff header', () => {
     render(
       <GuideFileDiff
         diff="@@ -1 +1 @@\n-old\n+new"
@@ -37,8 +41,9 @@ describe('GuideFileDiff', () => {
     )
 
     expect(screen.getAllByText('src/a.ts')).toHaveLength(1)
-    expect(screen.getByTestId('embedded-diff')).not.toHaveTextContent(
-      'src/a.ts',
+    expect(screen.getByTestId('embedded-diff')).toHaveTextContent('modified')
+    expect(screen.getByTestId('embedded-diff')).toHaveTextContent(
+      'Review the changed behavior.',
     )
   })
 })
