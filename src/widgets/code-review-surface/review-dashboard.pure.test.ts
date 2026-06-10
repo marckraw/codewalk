@@ -4,11 +4,14 @@ import {
   filterReviewWorkspaceSummaries,
   formatAbsoluteReviewDate,
   formatRelativeReviewTime,
+  groupReviewWorkspacePullRequestGroupsByRecency,
+  groupReviewWorkspacesByPullRequest,
   groupReviewWorkspacesByRecency,
   listReviewWorkspaceRepos,
   matchesReviewSearchQuery,
   normalizeReviewSearchQuery,
   reviewRecencyGroupLabel,
+  reviewWorkspacePullRequestKey,
   reviewWorkspaceRepoKey,
 } from './review-dashboard.pure'
 
@@ -47,6 +50,50 @@ describe('reviewWorkspaceRepoKey / listReviewWorkspaceRepos', () => {
       'acme/widgets',
       'ef-global/backpack',
     ])
+  })
+})
+
+describe('reviewWorkspacePullRequestKey / groupReviewWorkspacesByPullRequest', () => {
+  it('groups runs for the same PR and surfaces the latest run', () => {
+    const items = [
+      summary({
+        id: 'old-run',
+        number: 186,
+        updatedAt: new Date('2026-06-08T12:00:00Z'),
+      }),
+      summary({
+        id: 'other-pr',
+        number: 42,
+        updatedAt: new Date('2026-06-10T09:00:00Z'),
+      }),
+      summary({
+        id: 'latest-run',
+        number: 186,
+        updatedAt: new Date('2026-06-10T12:00:00Z'),
+      }),
+      summary({
+        id: 'middle-run',
+        number: 186,
+        updatedAt: new Date('2026-06-09T12:00:00Z'),
+      }),
+    ]
+
+    const groups = groupReviewWorkspacesByPullRequest(items)
+
+    expect(reviewWorkspacePullRequestKey(items[0])).toBe(
+      'ef-global/backpack#186',
+    )
+    expect(groups.map((group) => group.id)).toEqual([
+      'ef-global/backpack#186',
+      'ef-global/backpack#42',
+    ])
+    expect(groups[0].latest.id).toBe('latest-run')
+    expect(groups[0].previous.map((item) => item.id)).toEqual([
+      'middle-run',
+      'old-run',
+    ])
+    expect(groups[1].latest.id).toBe('other-pr')
+    expect(groups[1].previous).toEqual([])
   })
 })
 
@@ -301,6 +348,46 @@ describe('groupReviewWorkspacesByRecency', () => {
 
   it('returns no groups for an empty list', () => {
     expect(groupReviewWorkspacesByRecency([], now)).toEqual([])
+  })
+})
+
+describe('groupReviewWorkspacePullRequestGroupsByRecency', () => {
+  const now = new Date('2026-06-10T15:00:00')
+
+  it('buckets PR groups by their latest run', () => {
+    const pullRequestGroups = groupReviewWorkspacesByPullRequest([
+      summary({
+        id: 'old-run',
+        number: 1,
+        updatedAt: new Date('2026-06-01T12:00:00'),
+      }),
+      summary({
+        id: 'latest-run',
+        number: 1,
+        updatedAt: new Date('2026-06-10T12:00:00'),
+      }),
+      summary({
+        id: 'older-pr',
+        number: 2,
+        updatedAt: new Date('2026-01-15T12:00:00'),
+      }),
+    ])
+
+    const recencyGroups = groupReviewWorkspacePullRequestGroupsByRecency(
+      pullRequestGroups,
+      now,
+    )
+
+    expect(recencyGroups.map((group) => group.label)).toEqual([
+      'Today',
+      'Older',
+    ])
+    expect(recencyGroups[0].groups.map((group) => group.latest.id)).toEqual([
+      'latest-run',
+    ])
+    expect(recencyGroups[1].groups.map((group) => group.latest.id)).toEqual([
+      'older-pr',
+    ])
   })
 })
 

@@ -117,6 +117,70 @@ export interface ReviewRecencyGroup {
   label: ReviewRecencyGroupLabel
 }
 
+export interface ReviewWorkspacePullRequestGroup {
+  id: string
+  latest: ReviewWorkspaceSummary
+  previous: ReviewWorkspaceSummary[]
+}
+
+export interface ReviewPullRequestRecencyGroup {
+  groups: ReviewWorkspacePullRequestGroup[]
+  label: ReviewRecencyGroupLabel
+}
+
+export function reviewWorkspacePullRequestKey(
+  item: Pick<ReviewWorkspaceSummary, 'number' | 'owner' | 'repo'>,
+): string {
+  return `${reviewWorkspaceRepoKey(item)}#${item.number}`
+}
+
+/**
+ * Groups multiple generated review workspaces for the same pull request. Runs
+ * inside each group are sorted newest-first so the latest generated review is
+ * always surfaced, even if the input order changes.
+ */
+export function groupReviewWorkspacesByPullRequest(
+  items: ReviewWorkspaceSummary[],
+): ReviewWorkspacePullRequestGroup[] {
+  const buckets = new Map<
+    string,
+    { index: number; items: ReviewWorkspaceSummary[] }
+  >()
+
+  items.forEach((item, index) => {
+    const key = reviewWorkspacePullRequestKey(item)
+    const bucket = buckets.get(key)
+    if (bucket) {
+      bucket.items.push(item)
+    } else {
+      buckets.set(key, { index, items: [item] })
+    }
+  })
+
+  return [...buckets.entries()]
+    .map(([id, bucket]) => {
+      const sorted = [...bucket.items].sort(
+        (a, b) => toDate(b.updatedAt).getTime() - toDate(a.updatedAt).getTime(),
+      )
+      const [latest, ...previous] = sorted
+
+      return {
+        id,
+        index: bucket.index,
+        latest,
+        previous,
+      }
+    })
+    .sort((a, b) => {
+      const latestDelta =
+        toDate(b.latest.updatedAt).getTime() -
+        toDate(a.latest.updatedAt).getTime()
+
+      return latestDelta || a.index - b.index
+    })
+    .map(({ id, latest, previous }) => ({ id, latest, previous }))
+}
+
 /**
  * Buckets an `updatedAt` relative to the viewer's local midnight, so "Today"
  * matches the calendar day they see: Today, Yesterday, This week (past 7
@@ -169,6 +233,36 @@ export function groupReviewWorkspacesByRecency(
   return REVIEW_RECENCY_GROUP_LABELS.filter((label) => buckets.has(label)).map(
     (label) => ({
       items: buckets.get(label)!,
+      label,
+    }),
+  )
+}
+
+/**
+ * Buckets PR review groups by the latest run in each group.
+ */
+export function groupReviewWorkspacePullRequestGroupsByRecency(
+  groups: ReviewWorkspacePullRequestGroup[],
+  now: Date,
+): ReviewPullRequestRecencyGroup[] {
+  const buckets = new Map<
+    ReviewRecencyGroupLabel,
+    ReviewWorkspacePullRequestGroup[]
+  >()
+
+  for (const group of groups) {
+    const label = reviewRecencyGroupLabel(group.latest.updatedAt, now)
+    const bucket = buckets.get(label)
+    if (bucket) {
+      bucket.push(group)
+    } else {
+      buckets.set(label, [group])
+    }
+  }
+
+  return REVIEW_RECENCY_GROUP_LABELS.filter((label) => buckets.has(label)).map(
+    (label) => ({
+      groups: buckets.get(label)!,
       label,
     }),
   )
