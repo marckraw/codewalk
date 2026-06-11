@@ -54,6 +54,15 @@ describe('buildPullRequestSnapshotRows', () => {
     expect(rows.commits[0].authoredAt).toBeInstanceOf(Date)
     expect(rows.comments[0].createdAt).toBeInstanceOf(Date)
   })
+
+  it('uses the GitHub PR activity time as updatedAt, not persist time', () => {
+    const rows = buildPullRequestSnapshotRows({
+      importedByUserId: 'user-id',
+      snapshot: fixtureSnapshot,
+    })
+
+    expect(rows.snapshot.updatedAt).toEqual(new Date('2026-01-02T10:00:00Z'))
+  })
 })
 
 const fixtureSnapshot: NormalizedPullRequestSnapshot = {
