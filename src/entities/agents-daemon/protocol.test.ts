@@ -60,7 +60,50 @@ describe('agents-daemon protocol', () => {
 
   it('parses health and meta responses', () => {
     expect(parseAgentsDaemonHealth(healthPayload)).toEqual(healthPayload)
-    expect(parseAgentsDaemonMeta(metaPayload)).toEqual(metaPayload)
+    expect(parseAgentsDaemonMeta(metaPayload)).toEqual({
+      ...metaPayload,
+      providers: [
+        {
+          authenticated: true,
+          available: true,
+          cliVersion: 'codex-cli 0.139.0',
+          details: 'Codex login ready',
+          id: 'codex',
+          label: 'Codex',
+          models: [
+            { label: 'GPT-5.5', slug: 'gpt-5.5' },
+            { label: 'GPT-5.4', slug: 'gpt-5.4' },
+          ],
+        },
+        {
+          authenticated: false,
+          available: true,
+          cliVersion: 'claude-code 2.0.0',
+          details: 'Claude CLI not authenticated',
+          id: 'claude',
+          label: 'Claude Code',
+          models: [],
+        },
+      ],
+    })
+  })
+
+  it('treats older daemon provider listings without cliVersion as unknown', () => {
+    expect(
+      parseAgentsDaemonMeta({
+        ...metaPayload,
+        providers: [
+          {
+            authenticated: true,
+            available: true,
+            details: 'Codex login ready',
+            id: 'codex',
+            label: 'Codex',
+            models: [{ label: 'GPT-5.5', slug: 'gpt-5.5' }],
+          },
+        ],
+      }).providers[0]?.cliVersion,
+    ).toBeNull()
   })
 
   it('parses the canonical guide generation response', () => {
@@ -188,7 +231,38 @@ const metaPayload = {
     githubAuthenticated: true,
   },
   name: 'agents-daemon',
-  providers: [],
+  providers: [
+    {
+      authenticated: true,
+      available: true,
+      cliVersion: 'codex-cli 0.139.0',
+      details: 'Codex login ready',
+      features: {
+        attachmentKinds: ['image'],
+        effortLevels: ['none', 'low', 'medium', 'high', 'xhigh'],
+        followup: true,
+        planMode: true,
+        resume: true,
+        streaming: true,
+        structuredRequests: true,
+      },
+      id: 'codex',
+      label: 'Codex',
+      models: [
+        { label: 'GPT-5.5', slug: 'gpt-5.5' },
+        { label: 'GPT-5.4', slug: 'gpt-5.4' },
+      ],
+    },
+    {
+      authenticated: false,
+      available: true,
+      cliVersion: 'claude-code 2.0.0',
+      details: 'Claude CLI not authenticated',
+      id: 'claude',
+      label: 'Claude Code',
+      models: 'invalid',
+    },
+  ],
   runtime: {
     activeSessions: 1,
     host: '127.0.0.1',

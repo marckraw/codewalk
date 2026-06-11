@@ -3,7 +3,9 @@ export {
   AgentsDaemonClientError,
   checkAgentsDaemonConnection,
   createAgentsDaemonClient,
+  getAgentsDaemonStatus,
   type AgentsDaemonClientOptions,
+  type AgentsDaemonConnectionResult,
 } from './client'
 export {
   getAgentsDaemonConfig,
@@ -11,7 +13,10 @@ export {
   type AgentsDaemonConfigResult,
 } from './config'
 export {
-  resolveAgentsDaemonBaseUrl,
+  type AgentsDaemonMeta,
+  type AgentsDaemonProviderListing,
+  type AgentsDaemonProviderModel,
   type AgentsDaemonGuideJob,
   type AgentsDaemonGuideJobStatus,
+  resolveAgentsDaemonBaseUrl,
 } from './protocol'
