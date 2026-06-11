@@ -105,6 +105,33 @@ export type AgentsDaemonGenerateGuideResult = {
   guide: AgentsDaemonCodeReviewGuide
 }
 
+export type AgentsDaemonGuideJobStatus =
+  | 'queued'
+  | 'running'
+  | 'ready'
+  | 'failed'
+
+export type AgentsDaemonGuideJobCallback = {
+  url: string
+  secret: string
+}
+
+export type AgentsDaemonSubmitGuideJobInput = AgentsDaemonGenerateGuideInput & {
+  callback?: AgentsDaemonGuideJobCallback | null
+}
+
+export type AgentsDaemonGuideJobSubmitResult = {
+  jobId: string
+  status: AgentsDaemonGuideJobStatus
+}
+
+export type AgentsDaemonGuideJob = {
+  jobId: string
+  status: AgentsDaemonGuideJobStatus
+  error: string | null
+  result: AgentsDaemonGenerateGuideResult | null
+}
+
 export type AgentsDaemonBaseUrlResolution =
   | { ok: true; baseUrl: string }
   | { ok: false; reason: 'missing' | 'invalid' }
@@ -186,6 +213,64 @@ export function buildAgentsDaemonGenerateGuideRequestBody(
       repository,
     },
   }
+}
+
+export function buildAgentsDaemonSubmitGuideJobRequestBody(
+  input: AgentsDaemonSubmitGuideJobInput,
+): AgentsDaemonGenerateGuideRequestBody & {
+  callback?: AgentsDaemonGuideJobCallback
+} {
+  const callback = input.callback
+
+  if (callback && (!callback.url.trim() || !callback.secret.trim())) {
+    throw new Error('Guide job callbacks require both a url and a secret.')
+  }
+
+  return {
+    ...buildAgentsDaemonGenerateGuideRequestBody(input),
+    ...(callback ? { callback } : {}),
+  }
+}
+
+export function parseAgentsDaemonGuideJobSubmitResult(
+  value: unknown,
+): AgentsDaemonGuideJobSubmitResult {
+  const obj = requiredRecord(value, 'guide job submission')
+
+  return {
+    jobId: requireString(obj.jobId, 'jobId'),
+    status: parseGuideJobStatus(obj.status),
+  }
+}
+
+export function parseAgentsDaemonGuideJob(
+  value: unknown,
+): AgentsDaemonGuideJob {
+  const obj = requiredRecord(value, 'guide job')
+  const status = parseGuideJobStatus(obj.status)
+
+  return {
+    error: optionalString(obj.error, 'error'),
+    jobId: requireString(obj.jobId, 'jobId'),
+    result:
+      obj.result === null || obj.result === undefined
+        ? null
+        : parseAgentsDaemonGenerateGuideResult(obj.result),
+    status,
+  }
+}
+
+function parseGuideJobStatus(value: unknown): AgentsDaemonGuideJobStatus {
+  if (
+    value === 'queued' ||
+    value === 'running' ||
+    value === 'ready' ||
+    value === 'failed'
+  ) {
+    return value
+  }
+
+  throw new Error('Invalid guide job status')
 }
 
 export function parseAgentsDaemonHealth(value: unknown): AgentsDaemonHealth {

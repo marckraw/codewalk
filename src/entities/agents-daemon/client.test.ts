@@ -42,6 +42,59 @@ describe('AgentsDaemonClient', () => {
     )
   })
 
+  it('submits guide jobs and reads job status', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ jobId: 'job-1', status: 'queued' }, 202),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          error: null,
+          jobId: 'job-1',
+          result: null,
+          status: 'running',
+        }),
+      )
+    const client = new AgentsDaemonClient({
+      apiToken: 'secret-token',
+      baseUrl: 'https://daemon.example.com',
+      fetch,
+    })
+
+    await expect(
+      client.submitCodeReviewGuideJob({
+        callback: { secret: 'cb-secret', url: 'https://codewalk.example/cb' },
+        model: 'gpt-5.4',
+        provider: 'codex',
+        pullRequestNumber: 42,
+        repository: 'https://github.com/ef-global/example',
+      }),
+    ).resolves.toEqual({ jobId: 'job-1', status: 'queued' })
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'https://daemon.example.com/v0/code-review-guides/jobs',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
+      callback: { secret: 'cb-secret', url: 'https://codewalk.example/cb' },
+      source: { pullRequest: { number: 42 } },
+    })
+
+    await expect(client.getCodeReviewGuideJob('job-1')).resolves.toEqual({
+      error: null,
+      jobId: 'job-1',
+      result: null,
+      status: 'running',
+    })
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      'https://daemon.example.com/v0/code-review-guides/jobs/job-1',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
   it('posts guide generation requests to the daemon', async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse(generatePayload))
     const client = new AgentsDaemonClient({

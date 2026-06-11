@@ -31,6 +31,10 @@ vi.mock('@/features/theme-toggle', () => ({
   ThemeModeToggle: () => <div data-testid="theme-toggle" />,
 }))
 
+vi.mock('@/features/code-review-guide-generation', () => ({
+  reconcileCodeReviewGuideGenerationForSnapshot: vi.fn(),
+}))
+
 vi.mock('@/entities/auth-server', () => ({
   getCurrentCodewalkUser: vi.fn(),
 }))

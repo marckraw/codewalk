@@ -1,0 +1,2 @@
+ALTER TABLE "code_review_guide_generations" ADD COLUMN "daemon_job_id" varchar(191);--> statement-breakpoint
+ALTER TABLE "code_review_guide_generations" ADD COLUMN "daemon_callback_secret" varchar(191);

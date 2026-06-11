@@ -50,11 +50,11 @@ vi.mock('@/features/code-review-guide-generation', async () => {
 
   return {
     ...actual,
-    generateAndPersistCodeReviewGuide: vi.fn(),
+    startCodeReviewGuideGenerationRun: vi.fn(),
   }
 })
 
-import { generateAndPersistCodeReviewGuide } from '@/features/code-review-guide-generation'
+import { startCodeReviewGuideGenerationRun } from '@/features/code-review-guide-generation'
 import {
   listRepositoryReviewRules,
   persistPullRequestSnapshot,
@@ -109,7 +109,7 @@ describe('POST /api/github/webhooks', () => {
     vi.mocked(updateCodeReviewGuideGenerationComment).mockResolvedValue({
       githubCommentId: '1',
     } as never)
-    vi.mocked(generateAndPersistCodeReviewGuide).mockImplementation(
+    vi.mocked(startCodeReviewGuideGenerationRun).mockImplementation(
       async (input) => {
         await input.onStarted?.({
           generation: { githubCommentId: null } as never,
@@ -120,22 +120,21 @@ describe('POST /api/github/webhooks', () => {
             repo: 'example',
           } as never,
         })
-        await input.onReady?.({
-          generation: { githubCommentId: '1' } as never,
-          guide: { id: 'guide-id' } as never,
+
+        return {
+          complete: vi.fn().mockResolvedValue({
+            generation: {
+              daemonJobId: 'daemon-job-id',
+              id: 'generation-id',
+              status: 'running',
+            },
+          }),
+          generation: { id: 'generation-id', status: 'running' },
           snapshot: {
             id: 'snapshot-id',
             number: 42,
             owner: 'ef-global',
             repo: 'example',
-          } as never,
-        })
-
-        return {
-          generation: {
-            guideId: 'guide-id',
-            id: 'generation-id',
-            status: 'ready',
           },
         } as never
       },
@@ -165,14 +164,13 @@ describe('POST /api/github/webhooks', () => {
       importedByUserId: null,
       snapshot: fixtureSnapshot,
     })
-    expect(generateAndPersistCodeReviewGuide).not.toHaveBeenCalled()
+    expect(startCodeReviewGuideGenerationRun).not.toHaveBeenCalled()
     expect(afterTasks).toHaveLength(1)
 
     await runAfterTasks()
 
-    expect(generateAndPersistCodeReviewGuide).toHaveBeenCalledWith({
+    expect(startCodeReviewGuideGenerationRun).toHaveBeenCalledWith({
       onFailed: expect.any(Function),
-      onReady: expect.any(Function),
       onStarted: expect.any(Function),
       requestedByUserId: null,
       snapshotId: 'snapshot-id',
@@ -183,10 +181,12 @@ describe('POST /api/github/webhooks', () => {
       { number: 42, owner: 'ef-global', repo: 'example' },
       expect.stringContaining('is preparing'),
     )
+    // The ready comment is posted later, when the job outcome is finalized
+    // by reconcile-on-poll (or the daemon callback) — not by the webhook.
     expect(github.updateIssueComment).toHaveBeenCalledWith(
       { number: 42, owner: 'ef-global', repo: 'example' },
       '1',
-      expect.stringContaining('is ready'),
+      expect.stringContaining('is preparing'),
     )
     expect(updateCodeReviewGuideGenerationComment).toHaveBeenCalledWith({
       githubCommentId: '1',
@@ -301,11 +301,11 @@ describe('POST /api/github/webhooks', () => {
     const github = vi.mocked(createServerGitHubRestClient).mock.results[0]
       ?.value
     expect(github.createIssueComment).not.toHaveBeenCalled()
-    expect(generateAndPersistCodeReviewGuide).not.toHaveBeenCalled()
+    expect(startCodeReviewGuideGenerationRun).not.toHaveBeenCalled()
   })
 
-  it('acknowledges generation failures after persisting the snapshot', async () => {
-    vi.mocked(generateAndPersistCodeReviewGuide).mockImplementationOnce(
+  it('acknowledges job submission failures after persisting the snapshot', async () => {
+    vi.mocked(startCodeReviewGuideGenerationRun).mockImplementationOnce(
       async (input) => {
         await input.onStarted?.({
           generation: { githubCommentId: null } as never,
@@ -316,21 +316,33 @@ describe('POST /api/github/webhooks', () => {
             repo: 'example',
           } as never,
         })
-        await input.onFailed?.({
-          error: 'Could not reach agents-daemon.',
-          generation: { githubCommentId: '1' } as never,
+
+        return {
+          complete: vi.fn().mockImplementation(async () => {
+            await input.onFailed?.({
+              error: 'Could not reach agents-daemon.',
+              generation: { githubCommentId: '1' } as never,
+              snapshot: {
+                id: 'snapshot-id',
+                number: 42,
+                owner: 'ef-global',
+                repo: 'example',
+              } as never,
+            })
+            throw new CodeReviewGuideGenerationError(
+              'daemon',
+              'Could not reach agents-daemon.',
+              503,
+            )
+          }),
+          generation: { id: 'generation-id', status: 'running' },
           snapshot: {
             id: 'snapshot-id',
             number: 42,
             owner: 'ef-global',
             repo: 'example',
-          } as never,
-        })
-        throw new CodeReviewGuideGenerationError(
-          'daemon',
-          'Could not reach agents-daemon.',
-          503,
-        )
+          },
+        } as never
       },
     )
 

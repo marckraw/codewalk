@@ -6,7 +6,9 @@ import {
 import { getCurrentCodewalkUser } from '@/entities/auth-server'
 import { upsertAuthenticatedUser } from '@/entities/database'
 
-export const maxDuration = 800
+// The route only persists the running row and submits a daemon job; the long
+// generation happens on the daemon, so no extended duration is needed.
+export const maxDuration = 60
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {

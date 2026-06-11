@@ -9,6 +9,7 @@ import {
   getReviewWorkspace,
 } from '@/entities/database'
 import { parseGitHubPullRequestUrl } from '@/entities/github'
+import { reconcileCodeReviewGuideGenerationForSnapshot } from '@/features/code-review-guide-generation'
 import { ReviewSnapshotPageShell } from '../page-shell'
 
 type ReviewSnapshotSearchParams = Record<
@@ -89,6 +90,9 @@ export default async function ReviewSnapshotPage({
   }
 
   const { snapshotId } = routeParams
+  // Reopening the app after a long generation: pull the daemon's ground truth
+  // before the first render so a finished job shows as ready immediately.
+  await reconcileCodeReviewGuideGenerationForSnapshot(snapshotId)
   const workspace = await getReviewWorkspace(snapshotId)
 
   if (!workspace) {

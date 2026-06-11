@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildAgentsDaemonGenerateGuideRequestBody,
+  buildAgentsDaemonSubmitGuideJobRequestBody,
   buildAgentsDaemonUrl,
   parseAgentsDaemonGenerateGuideResult,
+  parseAgentsDaemonGuideJob,
+  parseAgentsDaemonGuideJobSubmitResult,
   parseAgentsDaemonHealth,
   parseAgentsDaemonMeta,
   resolveAgentsDaemonBaseUrl,
@@ -96,6 +99,71 @@ describe('agents-daemon protocol', () => {
         },
       }),
     ).toThrow('Invalid guide.overview')
+  })
+
+  it('builds the job submission body with an optional callback', () => {
+    const base = {
+      model: 'gpt-5.4',
+      provider: 'codex' as const,
+      pullRequestNumber: 42,
+      repository: 'https://github.com/ef-global/example',
+    }
+
+    expect(buildAgentsDaemonSubmitGuideJobRequestBody(base)).toEqual(
+      buildAgentsDaemonGenerateGuideRequestBody(base),
+    )
+    expect(
+      buildAgentsDaemonSubmitGuideJobRequestBody({
+        ...base,
+        callback: { secret: 'cb-secret', url: 'https://codewalk.example/cb' },
+      }),
+    ).toMatchObject({
+      callback: { secret: 'cb-secret', url: 'https://codewalk.example/cb' },
+    })
+    expect(() =>
+      buildAgentsDaemonSubmitGuideJobRequestBody({
+        ...base,
+        callback: { secret: ' ', url: 'https://codewalk.example/cb' },
+      }),
+    ).toThrow('callbacks require')
+  })
+
+  it('parses job submissions and job records', () => {
+    expect(
+      parseAgentsDaemonGuideJobSubmitResult({
+        jobId: 'job-1',
+        status: 'queued',
+      }),
+    ).toEqual({ jobId: 'job-1', status: 'queued' })
+    expect(() =>
+      parseAgentsDaemonGuideJobSubmitResult({ jobId: 'job-1', status: 'odd' }),
+    ).toThrow('Invalid guide job status')
+
+    expect(
+      parseAgentsDaemonGuideJob({
+        error: null,
+        jobId: 'job-1',
+        result: null,
+        status: 'running',
+      }),
+    ).toEqual({ error: null, jobId: 'job-1', result: null, status: 'running' })
+
+    const ready = parseAgentsDaemonGuideJob({
+      error: null,
+      jobId: 'job-1',
+      result: generatePayload,
+      status: 'ready',
+    })
+    expect(ready.result?.guide.id).toBe('guide-1')
+
+    expect(
+      parseAgentsDaemonGuideJob({
+        error: 'generation crashed',
+        jobId: 'job-1',
+        result: null,
+        status: 'failed',
+      }),
+    ).toMatchObject({ error: 'generation crashed', status: 'failed' })
   })
 })
 
