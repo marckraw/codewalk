@@ -31,11 +31,19 @@ export type UpdateCodeReviewGuideGenerationCommentInput = {
   snapshotId: string
 }
 
+export type AttachDaemonJobToCodeReviewGuideGenerationInput = {
+  daemonCallbackSecret: string | null
+  daemonJobId: string
+  snapshotId: string
+}
+
 export function buildStartCodeReviewGuideGenerationRow(
   input: StartCodeReviewGuideGenerationInput,
   now = new Date(),
 ) {
   return {
+    daemonCallbackSecret: null,
+    daemonJobId: null,
     effort: input.effort,
     error: null,
     finishedAt: null,
@@ -77,6 +85,10 @@ export async function startCodeReviewGuideGeneration(
     .values(row)
     .onConflictDoUpdate({
       set: {
+        // A retry is a brand-new daemon job; stale job pointers must not
+        // let the reconciler finalize this run from the previous job.
+        daemonCallbackSecret: row.daemonCallbackSecret,
+        daemonJobId: row.daemonJobId,
         effort: row.effort,
         error: row.error,
         finishedAt: row.finishedAt,
@@ -94,6 +106,40 @@ export async function startCodeReviewGuideGeneration(
       target: codeReviewGuideGenerations.snapshotId,
     })
     .returning()
+
+  return generation
+}
+
+export async function getCodeReviewGuideGenerationBySnapshotId(
+  snapshotId: string,
+): Promise<CodeReviewGuideGenerationRow | null> {
+  const db = getDb()
+  const [generation] = await db
+    .select()
+    .from(codeReviewGuideGenerations)
+    .where(eq(codeReviewGuideGenerations.snapshotId, snapshotId))
+    .limit(1)
+
+  return generation ?? null
+}
+
+export async function attachDaemonJobToCodeReviewGuideGeneration(
+  input: AttachDaemonJobToCodeReviewGuideGenerationInput,
+): Promise<CodeReviewGuideGenerationRow> {
+  const db = getDb()
+  const [generation] = await db
+    .update(codeReviewGuideGenerations)
+    .set({
+      daemonCallbackSecret: input.daemonCallbackSecret,
+      daemonJobId: input.daemonJobId,
+      updatedAt: new Date(),
+    })
+    .where(eq(codeReviewGuideGenerations.snapshotId, input.snapshotId))
+    .returning()
+
+  if (!generation) {
+    throw new Error('Code review guide generation was not started.')
+  }
 
   return generation
 }

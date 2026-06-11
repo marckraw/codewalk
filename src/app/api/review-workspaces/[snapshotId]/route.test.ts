@@ -9,8 +9,13 @@ vi.mock('@/entities/database', () => ({
   getReviewWorkspace: vi.fn(),
 }))
 
+vi.mock('@/features/code-review-guide-generation', () => ({
+  reconcileCodeReviewGuideGenerationForSnapshot: vi.fn(),
+}))
+
 import { getCurrentCodewalkUser } from '@/entities/auth-server'
 import { getReviewWorkspace } from '@/entities/database'
+import { reconcileCodeReviewGuideGenerationForSnapshot } from '@/features/code-review-guide-generation'
 
 function request() {
   return new Request('http://localhost/api/review-workspaces/snap-1')
@@ -47,6 +52,10 @@ describe('GET /api/review-workspaces/[snapshotId]', () => {
     expect(response.headers.get('Cache-Control')).toBe('no-store')
     await expect(response.json()).resolves.toMatchObject({ state: 'preparing' })
     expect(getReviewWorkspace).toHaveBeenCalledWith('snap-1')
+    // The poll endpoint pulls daemon ground truth before reading.
+    expect(reconcileCodeReviewGuideGenerationForSnapshot).toHaveBeenCalledWith(
+      'snap-1',
+    )
   })
 
   it('requires Clerk authentication', async () => {

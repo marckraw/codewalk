@@ -23,6 +23,8 @@ describe('code review guide generation rows', () => {
         now,
       ),
     ).toEqual({
+      daemonCallbackSecret: null,
+      daemonJobId: null,
       effort: 'high',
       error: null,
       finishedAt: null,

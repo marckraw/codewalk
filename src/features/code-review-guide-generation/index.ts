@@ -1,9 +1,11 @@
 export {
   CodeReviewGuideGenerationError,
   buildRepositoryUrlFromSnapshot,
-  generateAndPersistCodeReviewGuide,
+  finalizeCodeReviewGuideGenerationFromJob,
+  reconcileCodeReviewGuideGenerationForSnapshot,
   startCodeReviewGuideGenerationRun,
   type GenerateCodeReviewGuideInput,
-  type GenerateCodeReviewGuideResult,
+  type ReconcileCodeReviewGuideGenerationResult,
   type StartCodeReviewGuideGenerationRunResult,
+  type SubmitCodeReviewGuideGenerationJobResult,
 } from './code-review-guide-generation.service'

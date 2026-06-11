@@ -10,4 +10,8 @@ export {
   getAgentsDaemonRequestTimeoutMs,
   type AgentsDaemonConfigResult,
 } from './config'
-export { resolveAgentsDaemonBaseUrl } from './protocol'
+export {
+  resolveAgentsDaemonBaseUrl,
+  type AgentsDaemonGuideJob,
+  type AgentsDaemonGuideJobStatus,
+} from './protocol'

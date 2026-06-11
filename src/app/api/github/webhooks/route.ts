@@ -1,7 +1,7 @@
 import { after, NextResponse } from 'next/server'
 import {
   CodeReviewGuideGenerationError,
-  generateAndPersistCodeReviewGuide,
+  startCodeReviewGuideGenerationRun,
 } from '@/features/code-review-guide-generation'
 import {
   listRepositoryReviewRules,
@@ -227,7 +227,7 @@ async function generatePersistedSnapshotGuide(input: {
   }
 }) {
   try {
-    const result = await generateAndPersistCodeReviewGuide({
+    const run = await startCodeReviewGuideGenerationRun({
       onFailed: async ({ error, generation, snapshot }) => {
         await postReviewComment({
           error,
@@ -236,15 +236,6 @@ async function generatePersistedSnapshotGuide(input: {
           github: input.github,
           snapshot,
           state: 'failed',
-        })
-      },
-      onReady: async ({ generation, snapshot }) => {
-        await postReviewComment({
-          existingCommentId:
-            generation.githubCommentId ?? input.preparingCommentId,
-          github: input.github,
-          snapshot,
-          state: 'ready',
         })
       },
       onStarted: async ({ generation, snapshot }) => {
@@ -259,15 +250,18 @@ async function generatePersistedSnapshotGuide(input: {
       requestedByUserId: null,
       snapshotId: input.snapshot.id,
     })
+    // Fast: submits the generation as a daemon job. The ready/failed comment
+    // is posted when the outcome is finalized (reconcile-on-poll for now,
+    // the daemon's completion callback once that lands).
+    const result = await run.complete()
 
-    logCodewalkEvent('codewalk.github_webhook.generation_completed', {
+    logCodewalkEvent('codewalk.github_webhook.generation_job_submitted', {
+      daemonJobId: result.generation.daemonJobId,
       generationId: result.generation.id,
-      guideId: result.generation.guideId,
       owner: input.snapshot.owner,
       pullRequestNumber: input.snapshot.number,
       repo: input.snapshot.repo,
       snapshotId: input.snapshot.id,
-      status: result.generation.status,
     })
   } catch (error) {
     if (error instanceof CodeReviewGuideGenerationError) {

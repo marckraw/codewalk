@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getCurrentCodewalkUser } from '@/entities/auth-server'
 import { getReviewWorkspace } from '@/entities/database'
+import { reconcileCodeReviewGuideGenerationForSnapshot } from '@/features/code-review-guide-generation'
 
 export const runtime = 'nodejs'
 
@@ -35,6 +36,10 @@ export async function GET(_request: Request, context: RouteContext) {
       { status: 401 },
     )
   }
+
+  // Ground-truth check: if the daemon already finished this generation's job,
+  // finalize it now so this poll response reflects the outcome. Never throws.
+  await reconcileCodeReviewGuideGenerationForSnapshot(snapshotId)
 
   const workspace = await getReviewWorkspace(snapshotId)
 
