@@ -123,6 +123,19 @@ export async function getCodeReviewGuideGenerationBySnapshotId(
   return generation ?? null
 }
 
+export async function getCodeReviewGuideGenerationByDaemonJobId(
+  daemonJobId: string,
+): Promise<CodeReviewGuideGenerationRow | null> {
+  const db = getDb()
+  const [generation] = await db
+    .select()
+    .from(codeReviewGuideGenerations)
+    .where(eq(codeReviewGuideGenerations.daemonJobId, daemonJobId))
+    .limit(1)
+
+  return generation ?? null
+}
+
 export async function attachDaemonJobToCodeReviewGuideGeneration(
   input: AttachDaemonJobToCodeReviewGuideGenerationInput,
 ): Promise<CodeReviewGuideGenerationRow> {

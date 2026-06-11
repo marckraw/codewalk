@@ -11,7 +11,9 @@ export {
   type AgentsDaemonConfigResult,
 } from './config'
 export {
+  parseAgentsDaemonGuideJob,
   resolveAgentsDaemonBaseUrl,
+  verifyAgentsDaemonCallbackSignature,
   type AgentsDaemonGuideJob,
   type AgentsDaemonGuideJobStatus,
 } from './protocol'

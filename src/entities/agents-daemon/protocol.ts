@@ -1,3 +1,4 @@
+import { createHmac, timingSafeEqual } from 'node:crypto'
 import type {
   CodeReviewCacheIdentity,
   CodeReviewGuideGenerator,
@@ -258,6 +259,33 @@ export function parseAgentsDaemonGuideJob(
         : parseAgentsDaemonGenerateGuideResult(obj.result),
     status,
   }
+}
+
+/**
+ * Verify the daemon's completion-callback signature: HMAC-SHA256 over the raw
+ * body, `sha256=<hex>` in the `x-webhook-signature` header, keyed with the
+ * per-job secret codewalk supplied at submit time.
+ */
+export function verifyAgentsDaemonCallbackSignature(input: {
+  rawBody: string
+  secret: string
+  signatureHeader: string | null
+}): boolean {
+  const header = input.signatureHeader?.trim() ?? ''
+
+  if (!header.startsWith('sha256=')) {
+    return false
+  }
+
+  const expected = `sha256=${createHmac('sha256', input.secret).update(input.rawBody).digest('hex')}`
+  const expectedBuffer = Buffer.from(expected)
+  const actualBuffer = Buffer.from(header)
+
+  if (expectedBuffer.byteLength !== actualBuffer.byteLength) {
+    return false
+  }
+
+  return timingSafeEqual(expectedBuffer, actualBuffer)
 }
 
 function parseGuideJobStatus(value: unknown): AgentsDaemonGuideJobStatus {

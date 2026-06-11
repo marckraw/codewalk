@@ -117,6 +117,10 @@ describe('startCodeReviewGuideGenerationRun', () => {
 
     expect(result.generation.daemonJobId).toBe('daemon-job-id')
     expect(submitCodeReviewGuideJob).toHaveBeenCalledWith({
+      callback: {
+        secret: expect.any(String),
+        url: 'https://codewalk.example/api/code-review-guides/callback',
+      },
       effort: 'high',
       force: true,
       model: 'gpt-5.4',
@@ -124,8 +128,11 @@ describe('startCodeReviewGuideGenerationRun', () => {
       pullRequestNumber: 42,
       repository: 'https://github.com/ef-global/example',
     })
+    // The stored secret must be the one the daemon will sign with.
+    const submittedSecret =
+      submitCodeReviewGuideJob.mock.calls[0]?.[0]?.callback?.secret
     expect(attachDaemonJobToCodeReviewGuideGeneration).toHaveBeenCalledWith({
-      daemonCallbackSecret: null,
+      daemonCallbackSecret: submittedSecret,
       daemonJobId: 'daemon-job-id',
       snapshotId: 'snapshot-id',
     })

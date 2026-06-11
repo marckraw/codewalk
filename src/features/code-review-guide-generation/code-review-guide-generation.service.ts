@@ -82,6 +82,10 @@ export function buildRepositoryUrlFromSnapshot(
   return `https://github.com/${snapshot.owner}/${snapshot.repo}`
 }
 
+export function buildCodeReviewGuideCallbackUrl() {
+  return `${getCodewalkAppBaseUrl()}/api/code-review-guides/callback`
+}
+
 export type SubmitCodeReviewGuideGenerationJobResult = {
   generation: CodeReviewGuideGenerationRow
 }
@@ -177,8 +181,15 @@ async function submitCodeReviewGuideGenerationJob(
   generationId: string,
 ): Promise<SubmitCodeReviewGuideGenerationJobResult> {
   try {
+    // Per-job secret: the daemon signs its completion callback with it, and
+    // the callback route verifies against the copy stored on the row.
+    const callbackSecret = crypto.randomUUID()
     const client = createClient(config)
     const submission = await client.submitCodeReviewGuideJob({
+      callback: {
+        secret: callbackSecret,
+        url: buildCodeReviewGuideCallbackUrl(),
+      },
       effort: config.config.defaultEffort,
       force: input.force,
       model: config.config.defaultModel,
@@ -187,7 +198,7 @@ async function submitCodeReviewGuideGenerationJob(
       repository: buildRepositoryUrlFromSnapshot(snapshot),
     })
     const generation = await attachDaemonJobToCodeReviewGuideGeneration({
-      daemonCallbackSecret: null,
+      daemonCallbackSecret: callbackSecret,
       daemonJobId: submission.jobId,
       snapshotId: snapshot.id,
     })
