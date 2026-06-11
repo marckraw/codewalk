@@ -39,12 +39,13 @@ export type ReviewWorkspaceData = {
 }
 
 /**
- * A "running" generation older than this is presented as failed: the serverless
- * function that owned it cannot still be alive (daemon timeout is 600s and the
- * route maxDuration is 800s), so the row will never reach a terminal state on
- * its own — without this, the UI would show "preparing" and poll forever.
+ * Last-resort fallback: generations now run as daemon jobs and the reconciler
+ * pulls their real status on every workspace read, so a row only stays
+ * "running" this long when the daemon has been unreachable the whole time
+ * (or the job submit never happened). Generous on purpose — a busy daemon
+ * queue is not a failure.
  */
-export const STALE_RUNNING_GENERATION_THRESHOLD_MS = 20 * 60 * 1000
+export const STALE_RUNNING_GENERATION_THRESHOLD_MS = 60 * 60 * 1000
 
 export const STALE_RUNNING_GENERATION_ERROR =
   'Guide generation was interrupted on the server. Retry to start a new run.'

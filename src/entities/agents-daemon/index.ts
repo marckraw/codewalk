@@ -16,5 +16,7 @@ export {
   type AgentsDaemonMeta,
   type AgentsDaemonProviderListing,
   type AgentsDaemonProviderModel,
+  type AgentsDaemonGuideJob,
+  type AgentsDaemonGuideJobStatus,
   resolveAgentsDaemonBaseUrl,
 } from './protocol'

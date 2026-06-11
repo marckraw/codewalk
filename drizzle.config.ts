@@ -6,7 +6,7 @@ export default defineConfig({
     url: process.env.DATABASE_URL ?? '',
   },
   out: './drizzle',
-  schema: './src/lib/db/schema.ts',
+  schema: './src/entities/database/schema.ts',
   strict: true,
   verbose: true,
 })

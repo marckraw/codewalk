@@ -33,6 +33,16 @@ export function listReviewWorkspaceRepos(
   return [...repos].sort((a, b) => a.localeCompare(b))
 }
 
+/**
+ * Drops reviews for merged pull requests. Merged PRs no longer need a review,
+ * so the dashboard hides them unless the viewer opts in.
+ */
+export function hideMergedReviewWorkspaces(
+  items: ReviewWorkspaceSummary[],
+): ReviewWorkspaceSummary[] {
+  return items.filter((item) => item.prStatus !== 'merged')
+}
+
 export function filterReviewWorkspaceSummaries(
   items: ReviewWorkspaceSummary[],
   filters: {

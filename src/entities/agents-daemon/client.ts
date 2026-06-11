@@ -7,15 +7,23 @@ import {
 } from './config'
 import {
   buildAgentsDaemonGenerateGuideRequestBody,
+  buildAgentsDaemonSubmitGuideJobRequestBody,
   buildAgentsDaemonUrl,
   parseAgentsDaemonGenerateGuideResult,
+  parseAgentsDaemonGuideJob,
+  parseAgentsDaemonGuideJobSubmitResult,
   parseAgentsDaemonHealth,
   parseAgentsDaemonMeta,
   type AgentsDaemonGenerateGuideInput,
   type AgentsDaemonGenerateGuideResult,
+  type AgentsDaemonGuideJob,
+  type AgentsDaemonGuideJobSubmitResult,
   type AgentsDaemonHealth,
   type AgentsDaemonMeta,
+  type AgentsDaemonSubmitGuideJobInput,
 } from './protocol'
+
+export const JOB_API_REQUEST_TIMEOUT_MS = 30_000
 
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
@@ -98,10 +106,43 @@ export class AgentsDaemonClient {
     )
   }
 
+  async submitCodeReviewGuideJob(
+    input: AgentsDaemonSubmitGuideJobInput,
+  ): Promise<AgentsDaemonGuideJobSubmitResult> {
+    return this.requestJson(
+      '/v0/code-review-guides/jobs',
+      parseAgentsDaemonGuideJobSubmitResult,
+      {
+        authenticated: true,
+        body: buildAgentsDaemonSubmitGuideJobRequestBody(input),
+        method: 'POST',
+        // Submitting a job is a fast insert on the daemon; do not inherit the
+        // long generation timeout.
+        timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
+      },
+    )
+  }
+
+  async getCodeReviewGuideJob(jobId: string): Promise<AgentsDaemonGuideJob> {
+    return this.requestJson(
+      `/v0/code-review-guides/jobs/${encodeURIComponent(jobId)}`,
+      parseAgentsDaemonGuideJob,
+      {
+        authenticated: true,
+        timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
+      },
+    )
+  }
+
   private async requestJson<T>(
     path: string,
     parse: (value: unknown) => T,
-    options: { authenticated?: boolean; body?: unknown; method?: string } = {},
+    options: {
+      authenticated?: boolean
+      body?: unknown
+      method?: string
+      timeoutMs?: number
+    } = {},
   ): Promise<T> {
     const headers: Record<string, string> = {
       Accept: 'application/json',
@@ -117,7 +158,8 @@ export class AgentsDaemonClient {
 
     let response: Response
 
-    const timeout = createRequestTimeout(this.requestTimeoutMs)
+    const requestTimeoutMs = options.timeoutMs ?? this.requestTimeoutMs
+    const timeout = createRequestTimeout(requestTimeoutMs)
 
     try {
       response = await this.fetchImpl(
@@ -134,7 +176,7 @@ export class AgentsDaemonClient {
       )
     } catch (error) {
       const message = isAbortError(error)
-        ? `agents-daemon request timed out after ${this.requestTimeoutMs}ms.`
+        ? `agents-daemon request timed out after ${requestTimeoutMs}ms.`
         : 'Could not reach agents-daemon.'
 
       throw new AgentsDaemonClientError('network-error', message, {

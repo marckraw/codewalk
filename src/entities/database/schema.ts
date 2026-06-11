@@ -365,6 +365,8 @@ export const codeReviewGuideGenerations = pgTable(
     error: text('error'),
     githubCommentId: varchar('github_comment_id', { length: 191 }),
     githubCommentUrl: text('github_comment_url'),
+    daemonJobId: varchar('daemon_job_id', { length: 191 }),
+    daemonCallbackSecret: varchar('daemon_callback_secret', { length: 191 }),
     startedAt: timestamp('started_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

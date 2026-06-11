@@ -69,7 +69,9 @@ export function buildPullRequestSnapshotRows(
       repo: pullRequest.repo,
       state: pullRequest.state,
       title: pullRequest.title,
-      updatedAt: new Date(),
+      // GitHub's PR activity time, not persist time — the dashboard buckets
+      // "Today"/"Yesterday" and relative labels off this value.
+      updatedAt: new Date(pullRequest.updatedAt),
       url: pullRequest.url,
     },
   }
@@ -153,6 +155,7 @@ export async function persistPullRequestSnapshot(
         mergedAt: rows.snapshot.mergedAt,
         state: rows.snapshot.state,
         title: rows.snapshot.title,
+        updatedAt: rows.snapshot.updatedAt,
         url: rows.snapshot.url,
       })
       .where(

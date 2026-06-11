@@ -203,8 +203,11 @@ function renderPierreDiffPerformanceShell({
   }
 
   return (
+    // The Virtualizer tracks scrolling on its own root element, so it must be
+    // the overflow container — a scrolling ancestor leaves it stuck at the top
+    // window and the rest of the reserved diff height renders blank.
     <Virtualizer
-      className="h-full min-h-0"
+      className="app-scrollbar h-full min-h-0 overflow-auto"
       config={{ intersectionObserverMargin: 1200, overscrollSize: 800 }}
       contentClassName="min-h-full"
     >
