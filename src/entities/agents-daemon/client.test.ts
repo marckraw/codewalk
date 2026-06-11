@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
-import { AgentsDaemonClient, checkAgentsDaemonConnection } from './client'
+import {
+  AgentsDaemonClient,
+  checkAgentsDaemonConnection,
+  getAgentsDaemonStatus,
+} from './client'
 
 vi.mock('server-only', () => ({}))
 
@@ -141,6 +145,32 @@ describe('AgentsDaemonClient', () => {
       state: 'auth-failed',
     })
   })
+
+  it('uses the same result shape for daemon status checks', async () => {
+    await expect(
+      getAgentsDaemonStatus({
+        config: {
+          config: {
+            apiToken: 'secret-token',
+            baseUrl: 'https://daemon.example.com',
+            defaultEffort: null,
+            defaultModel: 'gpt-5.5',
+            defaultProvider: 'codex',
+            requestTimeoutMs: 240000,
+          },
+          ok: true,
+        },
+        fetch: vi
+          .fn()
+          .mockResolvedValueOnce(jsonResponse(healthPayload))
+          .mockResolvedValueOnce(jsonResponse(metaPayload)),
+      }),
+    ).resolves.toMatchObject({
+      meta: metaPayload,
+      ok: true,
+      state: 'connected',
+    })
+  })
 })
 
 function jsonResponse(body: unknown, status = 200) {
@@ -171,7 +201,17 @@ const metaPayload = {
     githubAuthenticated: true,
   },
   name: 'agents-daemon',
-  providers: [],
+  providers: [
+    {
+      authenticated: true,
+      available: true,
+      cliVersion: 'codex-cli 0.139.0',
+      details: 'Codex login ready',
+      id: 'codex',
+      label: 'Codex',
+      models: [{ label: 'GPT-5.5', slug: 'gpt-5.5' }],
+    },
+  ],
   runtime: {
     activeSessions: 1,
     host: '127.0.0.1',

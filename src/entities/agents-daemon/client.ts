@@ -263,6 +263,15 @@ export async function checkAgentsDaemonConnection(
   }
 }
 
+export async function getAgentsDaemonStatus(
+  input: {
+    config?: AgentsDaemonConfigResult
+    fetch?: FetchLike
+  } = {},
+): Promise<AgentsDaemonConnectionResult> {
+  return checkAgentsDaemonConnection(input)
+}
+
 async function readJsonResponse(response: Response): Promise<unknown> {
   try {
     return await response.json()

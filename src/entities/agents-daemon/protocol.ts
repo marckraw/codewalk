@@ -17,6 +17,21 @@ export type AgentsDaemonHealth = {
   version: string
 }
 
+export type AgentsDaemonProviderModel = {
+  label: string
+  slug: string
+}
+
+export type AgentsDaemonProviderListing = {
+  authenticated: boolean
+  available: boolean
+  cliVersion: string | null
+  details: string
+  id: string
+  label: string
+  models: AgentsDaemonProviderModel[]
+}
+
 export type AgentsDaemonMeta = {
   apiVersion: string
   deployment: {
@@ -27,7 +42,7 @@ export type AgentsDaemonMeta = {
     githubAuthenticated: boolean
   }
   name: string
-  providers: unknown[]
+  providers: AgentsDaemonProviderListing[]
   runtime: {
     activeSessions: number
     host: string
@@ -227,7 +242,7 @@ export function parseAgentsDaemonMeta(value: unknown): AgentsDaemonMeta {
       ),
     },
     name: requireString(obj.name, 'name'),
-    providers: obj.providers,
+    providers: parseProviderListings(obj.providers),
     runtime: {
       activeSessions: requireNumber(
         runtime.activeSessions,
@@ -258,6 +273,49 @@ export function parseAgentsDaemonGenerateGuideResult(
     pullRequest: parsePullRequest(obj.pullRequest),
     summary: parseSummary(obj.summary),
   }
+}
+
+function parseProviderListings(value: unknown): AgentsDaemonProviderListing[] {
+  if (!Array.isArray(value)) {
+    throw new Error('Invalid daemon metadata: providers')
+  }
+
+  return value.map((item, index) => {
+    const obj = requiredRecord(item, `providers.${index}`)
+
+    return {
+      authenticated: requireBoolean(
+        obj.authenticated,
+        `providers.${index}.authenticated`,
+      ),
+      available: requireBoolean(obj.available, `providers.${index}.available`),
+      cliVersion: typeof obj.cliVersion === 'string' ? obj.cliVersion : null,
+      details: requireString(obj.details, `providers.${index}.details`),
+      id: requireString(obj.id, `providers.${index}.id`),
+      label: requireString(obj.label, `providers.${index}.label`),
+      models: parseProviderModels(obj.models),
+    }
+  })
+}
+
+function parseProviderModels(value: unknown): AgentsDaemonProviderModel[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      return []
+    }
+
+    const record = item as Record<string, unknown>
+
+    if (typeof record.label !== 'string' || typeof record.slug !== 'string') {
+      return []
+    }
+
+    return [{ label: record.label, slug: record.slug }]
+  })
 }
 
 function parseGuide(value: unknown): AgentsDaemonCodeReviewGuide {

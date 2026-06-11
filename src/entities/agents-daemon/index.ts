@@ -3,11 +3,18 @@ export {
   AgentsDaemonClientError,
   checkAgentsDaemonConnection,
   createAgentsDaemonClient,
+  getAgentsDaemonStatus,
   type AgentsDaemonClientOptions,
+  type AgentsDaemonConnectionResult,
 } from './client'
 export {
   getAgentsDaemonConfig,
   getAgentsDaemonRequestTimeoutMs,
   type AgentsDaemonConfigResult,
 } from './config'
-export { resolveAgentsDaemonBaseUrl } from './protocol'
+export {
+  type AgentsDaemonMeta,
+  type AgentsDaemonProviderListing,
+  type AgentsDaemonProviderModel,
+  resolveAgentsDaemonBaseUrl,
+} from './protocol'
