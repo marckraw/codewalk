@@ -1,7 +1,13 @@
 import type { HTMLAttributes } from 'react'
 import { cn } from '@/shared/lib/cn.pure'
 
-type BadgeTone = 'default' | 'muted' | 'success' | 'warning' | 'danger'
+type BadgeTone =
+  | 'default'
+  | 'muted'
+  | 'success'
+  | 'warning'
+  | 'danger'
+  | 'merged'
 
 const toneClassName: Record<BadgeTone, string> = {
   default: 'text-[var(--foreground)]',
@@ -9,6 +15,7 @@ const toneClassName: Record<BadgeTone, string> = {
   success: 'text-[var(--success)]',
   warning: 'text-[var(--warning)]',
   danger: 'text-[var(--danger)]',
+  merged: 'text-[var(--merged)]',
 }
 
 type BadgeProps = HTMLAttributes<HTMLSpanElement> & {

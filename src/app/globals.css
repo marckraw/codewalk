@@ -37,6 +37,7 @@
   --success: #15803d;
   --warning: #b45309;
   --danger: #b91c1c;
+  --merged: #8250df;
 }
 
 html.dark {
@@ -60,6 +61,7 @@ html.dark {
   --success: #86efac;
   --warning: #fbbf24;
   --danger: #f87171;
+  --merged: #a371f7;
 }
 
 * {

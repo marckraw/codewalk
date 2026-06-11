@@ -9,13 +9,15 @@ const PR_STATUS_LABEL: Record<PullRequestLifecycleStatus, string> = {
   unknown: 'unknown',
 }
 
+// Mirror GitHub's PR state colors: open/ready green, draft gray,
+// merged purple, closed red.
 const PR_STATUS_TONE: Record<
   PullRequestLifecycleStatus,
-  'success' | 'warning' | 'danger' | 'muted'
+  'success' | 'warning' | 'danger' | 'muted' | 'merged'
 > = {
   closed: 'danger',
-  draft: 'warning',
-  merged: 'success',
+  draft: 'muted',
+  merged: 'merged',
   ready_for_review: 'success',
   unknown: 'muted',
 }
