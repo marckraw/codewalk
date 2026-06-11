@@ -29,7 +29,8 @@ import {
   logCodewalkWarning,
 } from '@/shared/lib/observability'
 
-export const maxDuration = 800
+// Snapshot fetch + comment + job submit — nothing long-running remains here.
+export const maxDuration = 60
 export const runtime = 'nodejs'
 
 export async function POST(request: Request) {
