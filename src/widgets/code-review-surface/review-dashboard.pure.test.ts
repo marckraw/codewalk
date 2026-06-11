@@ -7,6 +7,7 @@ import {
   groupReviewWorkspacePullRequestGroupsByRecency,
   groupReviewWorkspacesByPullRequest,
   groupReviewWorkspacesByRecency,
+  hideMergedReviewWorkspaces,
   listReviewWorkspaceRepos,
   matchesReviewSearchQuery,
   normalizeReviewSearchQuery,
@@ -94,6 +95,23 @@ describe('reviewWorkspacePullRequestKey / groupReviewWorkspacesByPullRequest', (
     ])
     expect(groups[1].latest.id).toBe('other-pr')
     expect(groups[1].previous).toEqual([])
+  })
+})
+
+describe('hideMergedReviewWorkspaces', () => {
+  it('drops merged pull requests and keeps everything else', () => {
+    const items = [
+      summary({ id: 'open', prStatus: 'ready_for_review' }),
+      summary({ id: 'merged', prStatus: 'merged' }),
+      summary({ id: 'draft', prStatus: 'draft' }),
+      summary({ id: 'closed', prStatus: 'closed' }),
+    ]
+
+    expect(hideMergedReviewWorkspaces(items).map((item) => item.id)).toEqual([
+      'open',
+      'draft',
+      'closed',
+    ])
   })
 })
 

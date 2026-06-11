@@ -14,6 +14,7 @@ import { REVIEW_WORKSPACE_POLL_INTERVAL_MS } from './use-review-workspace-live.p
 import {
   filterReviewWorkspaceSummaries,
   groupReviewWorkspacePullRequestGroupsByRecency,
+  hideMergedReviewWorkspaces,
   groupReviewWorkspacesByPullRequest,
   listReviewWorkspaceRepos,
   REVIEW_STATUS_FILTERS,
@@ -52,6 +53,7 @@ function subscribeNow(callback: () => void) {
 export function ReviewDashboard({ items }: ReviewDashboardProps) {
   const [statusFilter, setStatusFilter] = useState<ReviewStatusFilter>('all')
   const [repoFilter, setRepoFilter] = useState<ReviewRepoFilter>('all')
+  const [showMerged, setShowMerged] = useState(false)
   const [query, setQuery] = useState('')
   const nowMs = useSyncExternalStore(
     subscribeNow,
@@ -76,16 +78,24 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
     return () => clearInterval(timer)
   }, [hasPreparing, router])
 
-  const repos = useMemo(() => listReviewWorkspaceRepos(items), [items])
-  const statusCounts = useMemo(() => countByStatus(items), [items])
+  // Merged PRs no longer need a review, so they are hidden by default and the
+  // status chips count only what the list can actually show.
+  const baseItems = useMemo(
+    () => (showMerged ? items : hideMergedReviewWorkspaces(items)),
+    [items, showMerged],
+  )
+  const mergedCount = items.length - hideMergedReviewWorkspaces(items).length
+
+  const repos = useMemo(() => listReviewWorkspaceRepos(baseItems), [baseItems])
+  const statusCounts = useMemo(() => countByStatus(baseItems), [baseItems])
   const visibleItems = useMemo(
     () =>
-      filterReviewWorkspaceSummaries(items, {
+      filterReviewWorkspaceSummaries(baseItems, {
         query,
         repo: repoFilter,
         status: statusFilter,
       }),
-    [items, query, repoFilter, statusFilter],
+    [baseItems, query, repoFilter, statusFilter],
   )
   const visibleGroups = useMemo(
     () => groupReviewWorkspacesByPullRequest(visibleItems),
@@ -127,7 +137,7 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
           {REVIEW_STATUS_FILTERS.map((filter) => {
             const active = statusFilter === filter
             const filterCount =
-              filter === 'all' ? items.length : (statusCounts[filter] ?? 0)
+              filter === 'all' ? baseItems.length : (statusCounts[filter] ?? 0)
 
             return (
               <Button
@@ -147,23 +157,37 @@ export function ReviewDashboard({ items }: ReviewDashboardProps) {
           })}
         </div>
 
-        {repos.length > 1 ? (
-          <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
-            Repository
-            <select
-              className="h-7 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 text-xs text-[var(--foreground)]"
-              onChange={(event) => setRepoFilter(event.target.value)}
-              value={repoFilter}
-            >
-              <option value="all">All repositories</option>
-              {repos.map((repo) => (
-                <option key={repo} value={repo}>
-                  {repo}
-                </option>
-              ))}
-            </select>
-          </label>
-        ) : null}
+        <div className="flex flex-wrap items-center gap-3">
+          {mergedCount > 0 || showMerged ? (
+            <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+              <input
+                checked={showMerged}
+                className="accent-[var(--foreground)]"
+                onChange={(event) => setShowMerged(event.target.checked)}
+                type="checkbox"
+              />
+              Show merged {mergedCount}
+            </label>
+          ) : null}
+
+          {repos.length > 1 ? (
+            <label className="flex items-center gap-2 text-xs text-[var(--muted)]">
+              Repository
+              <select
+                className="h-7 rounded-md border border-[var(--border)] bg-[var(--panel)] px-2 text-xs text-[var(--foreground)]"
+                onChange={(event) => setRepoFilter(event.target.value)}
+                value={repoFilter}
+              >
+                <option value="all">All repositories</option>
+                {repos.map((repo) => (
+                  <option key={repo} value={repo}>
+                    {repo}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </div>
       </div>
 
       {visibleItems.length === 0 ? (
