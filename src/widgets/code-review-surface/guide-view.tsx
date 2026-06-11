@@ -32,12 +32,12 @@ export function GuideView({
 
   return (
     <main className="app-scrollbar h-full min-w-0 overflow-y-auto bg-background">
-      <div className="mx-auto flex min-h-full max-w-[1440px] flex-col">
+      <div className="flex min-h-full flex-col">
         {guide.sections.map((section, index) => (
           <section
             key={section.id}
             ref={renderSectionRef(section.id)}
-            className="grid min-h-full min-w-0 scroll-mt-0 gap-5 border-b border-border px-5 py-5 xl:grid-cols-[minmax(260px,360px)_minmax(0,1fr)]"
+            className="grid min-h-full min-w-0 scroll-mt-0 gap-5 border-b border-border px-5 py-5 xl:grid-cols-[minmax(260px,360px)_minmax(0,1fr)] 2xl:grid-cols-[minmax(280px,420px)_minmax(0,1fr)]"
           >
             <div className="self-start bg-background py-1 xl:sticky xl:top-0">
               <div className="flex min-w-0 items-start justify-between gap-3">
