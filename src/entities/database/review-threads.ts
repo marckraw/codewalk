@@ -31,6 +31,14 @@ export type ReviewThreadCommentInsert = {
   authorUserId: string | null
   body: string
   agentState?: ReviewThreadAgentState | null
+  agentSeqStart?: number | null
+}
+
+export type ReviewThreadCommentUpdate = {
+  agentSeqStart?: number | null
+  agentState?: ReviewThreadAgentState | null
+  body?: string
+  commentId: string
 }
 
 export type ReviewThreadWithComments = ReviewThreadRow & {
@@ -65,6 +73,7 @@ export function buildReviewThreadCommentRow(input: ReviewThreadCommentInsert) {
     authorUserId: input.authorUserId,
     body: input.body,
     agentState: input.agentState ?? null,
+    agentSeqStart: input.agentSeqStart ?? null,
   }
 }
 
@@ -152,6 +161,31 @@ export async function addReviewThreadComment(
     .update(reviewThreads)
     .set({ updatedAt: new Date() })
     .where(eq(reviewThreads.id, input.threadId))
+  return comment
+}
+
+export async function updateReviewThreadComment(
+  input: ReviewThreadCommentUpdate,
+): Promise<ReviewThreadCommentRow> {
+  const db = getDb()
+  const [comment] = await db
+    .update(reviewThreadComments)
+    .set({
+      ...(input.body === undefined ? {} : { body: input.body }),
+      ...(input.agentState === undefined
+        ? {}
+        : { agentState: input.agentState }),
+      ...(input.agentSeqStart === undefined
+        ? {}
+        : { agentSeqStart: input.agentSeqStart }),
+    })
+    .where(eq(reviewThreadComments.id, input.commentId))
+    .returning()
+
+  if (!comment) {
+    throw new Error('Review thread comment was not found.')
+  }
+
   return comment
 }
 

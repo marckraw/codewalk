@@ -192,6 +192,37 @@ export type AgentsDaemonExecutionStartResult = {
   sessionId: string
 }
 
+export type AgentsDaemonExecutionCommandInput = {
+  sessionId: string
+  text: string
+}
+
+export type AgentsDaemonExecutionCommandRequestBody = {
+  protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
+  sessionId: string
+  command: {
+    kind: 'send-message'
+    text: string
+  }
+}
+
+export type AgentsDaemonExecutionCommandResult = {
+  accepted: boolean
+}
+
+/**
+ * The slice of daemon conversation items Codewalk consumes when extracting
+ * agent replies. Items the daemon emits with other kinds (tool calls,
+ * thinking, notes) are represented by their kind only.
+ */
+export type AgentsDaemonConversationItem = {
+  id: string
+  kind: string
+  actor: string | null
+  state: string | null
+  text: string | null
+}
+
 export type AgentsDaemonExecutionSessionSnapshot = {
   protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
   sessionId: string
@@ -353,6 +384,68 @@ export function buildAgentsDaemonExecutionStartRequestBody(
     protocolVersion: EXECUTION_PROTOCOL_VERSION,
     providerId,
   }
+}
+
+export function buildAgentsDaemonExecutionCommandRequestBody(
+  input: AgentsDaemonExecutionCommandInput,
+): AgentsDaemonExecutionCommandRequestBody {
+  const sessionId = input.sessionId.trim()
+  const text = input.text.trim()
+
+  if (!sessionId) {
+    throw new Error('Execution commands require a session id.')
+  }
+
+  if (!text) {
+    throw new Error('Execution send-message commands require text.')
+  }
+
+  return {
+    command: {
+      kind: 'send-message',
+      text,
+    },
+    protocolVersion: EXECUTION_PROTOCOL_VERSION,
+    sessionId,
+  }
+}
+
+export function parseAgentsDaemonExecutionCommandResult(
+  value: unknown,
+): AgentsDaemonExecutionCommandResult {
+  const obj = requiredRecord(value, 'execution command result')
+
+  return { accepted: requireBoolean(obj.accepted, 'accepted') }
+}
+
+/**
+ * Conversation items are parsed leniently: a malformed item must not make the
+ * whole snapshot unusable, so unknown shapes collapse to kind-only entries.
+ */
+export function parseAgentsDaemonConversationItems(
+  value: unknown[],
+): AgentsDaemonConversationItem[] {
+  return value.flatMap((item) => {
+    if (typeof item !== 'object' || item === null || Array.isArray(item)) {
+      return []
+    }
+
+    const record = item as Record<string, unknown>
+
+    if (typeof record.id !== 'string' || typeof record.kind !== 'string') {
+      return []
+    }
+
+    return [
+      {
+        actor: typeof record.actor === 'string' ? record.actor : null,
+        id: record.id,
+        kind: record.kind,
+        state: typeof record.state === 'string' ? record.state : null,
+        text: typeof record.text === 'string' ? record.text : null,
+      },
+    ]
+  })
 }
 
 export function parseAgentsDaemonExecutionStartResult(

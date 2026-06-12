@@ -588,6 +588,10 @@ export const reviewThreadComments = pgTable(
     }),
     body: text('body').notNull(),
     agentState: reviewThreadAgentState('agent_state'),
+    // Daemon envelope seq recorded just before the agent turn started.
+    // Per-PR turns are FIFO, so conversation growth after this point belongs
+    // to the pending agent reply (recovery + P8 streaming).
+    agentSeqStart: integer('agent_seq_start'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),

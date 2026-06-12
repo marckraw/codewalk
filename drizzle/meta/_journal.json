@@ -64,6 +64,13 @@
       "when": 1781278379552,
       "tag": "0008_elite_harry_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1781285422163,
+      "tag": "0009_abandoned_wendigo",
+      "breakpoints": true
     }
   ]
 }

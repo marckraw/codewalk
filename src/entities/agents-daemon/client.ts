@@ -6,10 +6,12 @@ import {
   type AgentsDaemonConfigResult,
 } from './config'
 import {
+  buildAgentsDaemonExecutionCommandRequestBody,
   buildAgentsDaemonGenerateGuideRequestBody,
   buildAgentsDaemonExecutionStartRequestBody,
   buildAgentsDaemonSubmitGuideJobRequestBody,
   buildAgentsDaemonUrl,
+  parseAgentsDaemonExecutionCommandResult,
   parseAgentsDaemonExecutionSessionSnapshot,
   parseAgentsDaemonExecutionStartResult,
   parseAgentsDaemonGenerateGuideResult,
@@ -17,6 +19,8 @@ import {
   parseAgentsDaemonGuideJobSubmitResult,
   parseAgentsDaemonHealth,
   parseAgentsDaemonMeta,
+  type AgentsDaemonExecutionCommandInput,
+  type AgentsDaemonExecutionCommandResult,
   type AgentsDaemonExecutionSessionSnapshot,
   type AgentsDaemonExecutionStartInput,
   type AgentsDaemonExecutionStartResult,
@@ -163,6 +167,21 @@ export class AgentsDaemonClient {
       parseAgentsDaemonExecutionSessionSnapshot,
       {
         authenticated: true,
+        timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
+      },
+    )
+  }
+
+  async sendExecutionSessionMessage(
+    input: AgentsDaemonExecutionCommandInput,
+  ): Promise<AgentsDaemonExecutionCommandResult> {
+    return this.requestJson(
+      `/v0/execution/sessions/${encodeURIComponent(input.sessionId)}/commands`,
+      parseAgentsDaemonExecutionCommandResult,
+      {
+        authenticated: true,
+        body: buildAgentsDaemonExecutionCommandRequestBody(input),
+        method: 'POST',
         timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
       },
     )

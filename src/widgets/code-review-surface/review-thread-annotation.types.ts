@@ -16,9 +16,11 @@ export type ReviewThreadAnnotationData =
     }
   | {
       error: string | null
+      isAskingAgent: boolean
       isReplying: boolean
       isUpdatingStatus: boolean
       kind: 'thread'
+      onAskAgent: () => void
       onReplyBodyChange: (body: string) => void
       onReplySubmit: () => void
       onStatusChange: (status: 'open' | 'resolved') => void

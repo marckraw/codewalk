@@ -27,6 +27,7 @@ vi.mock('@/entities/review-thread', async () => {
     addReviewThreadComment: vi.fn(),
     createReviewThread: vi.fn(),
     listReviewThreads: vi.fn(() => Promise.resolve([])),
+    requestReviewThreadAgentReply: vi.fn(),
     updateReviewThreadStatus: vi.fn(),
   }
 })
@@ -91,10 +92,17 @@ vi.mock('./changed-files-tree', () => ({
 }))
 
 import { ReviewWorkspace } from './review-workspace'
-import { createReviewThread, listReviewThreads } from '@/entities/review-thread'
+import {
+  createReviewThread,
+  listReviewThreads,
+  requestReviewThreadAgentReply,
+} from '@/entities/review-thread'
 
 const mockedCreateReviewThread = vi.mocked(createReviewThread)
 const mockedListReviewThreads = vi.mocked(listReviewThreads)
+const mockedRequestReviewThreadAgentReply = vi.mocked(
+  requestReviewThreadAgentReply,
+)
 
 function makeWorkspace(): ReviewWorkspaceModel {
   return {
@@ -151,6 +159,10 @@ describe('ReviewWorkspace', () => {
     mockedCreateReviewThread.mockReset()
     mockedListReviewThreads.mockReset()
     mockedListReviewThreads.mockResolvedValue([])
+    mockedRequestReviewThreadAgentReply.mockReset()
+    mockedRequestReviewThreadAgentReply.mockImplementation(
+      async (threadId: string) => makeAnsweredReviewThread(threadId),
+    )
   })
 
   afterEach(() => cleanup())
@@ -251,7 +263,79 @@ describe('ReviewWorkspace', () => {
     })
     expect(screen.getByText('What guarantees this path?')).toBeInTheDocument()
   })
+
+  it('asks the agent automatically after creating a thread', async () => {
+    const user = userEvent.setup()
+    mockedCreateReviewThread.mockResolvedValue(
+      makeReviewThread({ body: 'What guarantees this path?' }),
+    )
+
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    await user.click(screen.getByRole('button', { name: /Diff/ }))
+    await user.click(screen.getByRole('button', { name: 'Select line 1' }))
+    await user.type(
+      screen.getByLabelText('Review thread comment'),
+      'What guarantees this path?',
+    )
+    await user.click(screen.getByRole('button', { name: /Start thread/ }))
+
+    await waitFor(() => {
+      expect(mockedRequestReviewThreadAgentReply).toHaveBeenCalledWith(
+        'thread-1',
+      )
+    })
+    expect(
+      await screen.findByText('It validates the token before use.'),
+    ).toBeInTheDocument()
+  })
+
+  it('shows an errored agent comment when the agent request fails', async () => {
+    const user = userEvent.setup()
+    mockedCreateReviewThread.mockResolvedValue(
+      makeReviewThread({ body: 'What guarantees this path?' }),
+    )
+    mockedRequestReviewThreadAgentReply.mockRejectedValue(
+      new Error('The review agent session failed while answering.'),
+    )
+
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    await user.click(screen.getByRole('button', { name: /Diff/ }))
+    await user.click(screen.getByRole('button', { name: 'Select line 1' }))
+    await user.type(
+      screen.getByLabelText('Review thread comment'),
+      'What guarantees this path?',
+    )
+    await user.click(screen.getByRole('button', { name: /Start thread/ }))
+
+    expect(
+      await screen.findByText(
+        'The review agent session failed while answering.',
+      ),
+    ).toBeInTheDocument()
+  })
 })
+
+function makeAnsweredReviewThread(threadId: string): ReviewThread {
+  const base = makeReviewThread({ body: 'What guarantees this path?' })
+
+  return {
+    ...base,
+    comments: [
+      ...base.comments,
+      {
+        agentState: 'complete',
+        authorType: 'agent',
+        authorUserId: null,
+        body: 'It validates the token before use.',
+        createdAt: '2026-06-12T10:00:10.000Z',
+        id: 'comment-agent-1',
+        threadId,
+      },
+    ],
+  }
+}
 
 function makeReviewThread(input?: { body?: string }): ReviewThread {
   return {

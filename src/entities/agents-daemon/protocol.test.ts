@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  buildAgentsDaemonExecutionCommandRequestBody,
   buildAgentsDaemonGenerateGuideRequestBody,
   buildAgentsDaemonExecutionStartRequestBody,
   buildAgentsDaemonSubmitGuideJobRequestBody,
   buildAgentsDaemonUrl,
+  parseAgentsDaemonConversationItems,
+  parseAgentsDaemonExecutionCommandResult,
   parseAgentsDaemonExecutionSessionSnapshot,
   parseAgentsDaemonExecutionStartResult,
   parseAgentsDaemonGenerateGuideResult,
@@ -215,6 +218,65 @@ describe('agents-daemon protocol', () => {
     expect(
       parseAgentsDaemonExecutionSessionSnapshot(executionSnapshot),
     ).toEqual(executionSnapshot)
+  })
+
+  it('builds send-message command envelopes and parses command results', () => {
+    expect(
+      buildAgentsDaemonExecutionCommandRequestBody({
+        sessionId: ' session-1 ',
+        text: ' What does this do? ',
+      }),
+    ).toEqual({
+      command: { kind: 'send-message', text: 'What does this do?' },
+      protocolVersion: 1,
+      sessionId: 'session-1',
+    })
+
+    expect(() =>
+      buildAgentsDaemonExecutionCommandRequestBody({
+        sessionId: 'session-1',
+        text: '  ',
+      }),
+    ).toThrow('require text')
+
+    expect(parseAgentsDaemonExecutionCommandResult({ accepted: true })).toEqual(
+      { accepted: true },
+    )
+    expect(() => parseAgentsDaemonExecutionCommandResult({})).toThrow(
+      'Invalid accepted',
+    )
+  })
+
+  it('parses conversation items leniently', () => {
+    expect(
+      parseAgentsDaemonConversationItems([
+        {
+          actor: 'assistant',
+          id: 'item-2',
+          kind: 'message',
+          state: 'complete',
+          text: 'It validates the token.',
+        },
+        { id: 'item-3', kind: 'tool-call', toolName: 'grep' },
+        { nonsense: true },
+        null,
+      ]),
+    ).toEqual([
+      {
+        actor: 'assistant',
+        id: 'item-2',
+        kind: 'message',
+        state: 'complete',
+        text: 'It validates the token.',
+      },
+      {
+        actor: null,
+        id: 'item-3',
+        kind: 'tool-call',
+        state: null,
+        text: null,
+      },
+    ])
   })
 
   it('parses job submissions and job records', () => {

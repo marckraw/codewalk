@@ -11,6 +11,7 @@ import {
   createReviewThread,
   listReviewThreads,
   pierreSideFromReviewThreadDiffSide,
+  requestReviewThreadAgentReply,
   updateReviewThreadStatus,
   type ReviewThread,
 } from '@/entities/review-thread'
@@ -105,6 +106,9 @@ export function ReviewWorkspace({
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({})
   const [threadErrors, setThreadErrors] = useState<Record<string, string>>({})
   const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null)
+  const [askingAgentThreadId, setAskingAgentThreadId] = useState<string | null>(
+    null,
+  )
   const [updatingStatusThreadId, setUpdatingStatusThreadId] = useState<
     string | null
   >(null)
@@ -377,6 +381,98 @@ export function ReviewWorkspace({
     [],
   )
 
+  const runAgentReplyForThread = useCallback(async (threadId: string) => {
+    const placeholderId = `pending-agent-${threadId}`
+
+    setAskingAgentThreadId(threadId)
+    setReviewThreads((current) =>
+      current.map((thread) =>
+        thread.id === threadId
+          ? {
+              ...thread,
+              comments: [
+                ...thread.comments,
+                {
+                  agentState: 'pending',
+                  authorType: 'agent',
+                  authorUserId: null,
+                  body: '',
+                  createdAt: new Date().toISOString(),
+                  id: placeholderId,
+                  threadId,
+                },
+              ],
+            }
+          : thread,
+      ),
+    )
+
+    try {
+      const updated = await requestReviewThreadAgentReply(threadId)
+      setReviewThreads((current) =>
+        current.map((thread) => (thread.id === threadId ? updated : thread)),
+      )
+    } catch (error) {
+      const message = reviewThreadErrorMessage(error)
+      setReviewThreads((current) =>
+        current.map((thread) =>
+          thread.id === threadId
+            ? {
+                ...thread,
+                comments: thread.comments.map((comment) =>
+                  comment.id === placeholderId
+                    ? { ...comment, agentState: 'error', body: message }
+                    : comment,
+                ),
+              }
+            : thread,
+        ),
+      )
+    } finally {
+      setAskingAgentThreadId(null)
+    }
+  }, [])
+
+  const askAgentInThread = useCallback(
+    async (threadId: string) => {
+      const body = replyBodies[threadId]?.trim() ?? ''
+
+      if (!body) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: 'Enter a question before asking the agent.',
+        }))
+        return
+      }
+
+      setReplyingThreadId(threadId)
+      setThreadErrors((current) => ({ ...current, [threadId]: '' }))
+
+      try {
+        const comment = await addReviewThreadComment({ body, threadId })
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === threadId
+              ? { ...thread, comments: [...thread.comments, comment] }
+              : thread,
+          ),
+        )
+        setReplyBodies((current) => ({ ...current, [threadId]: '' }))
+      } catch (error) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: reviewThreadErrorMessage(error),
+        }))
+        setReplyingThreadId(null)
+        return
+      }
+
+      setReplyingThreadId(null)
+      await runAgentReplyForThread(threadId)
+    },
+    [replyBodies, runAgentReplyForThread],
+  )
+
   const submitReviewThreadReply = useCallback(
     async (threadId: string) => {
       const body = replyBodies[threadId]?.trim() ?? ''
@@ -451,6 +547,8 @@ export function ReviewWorkspace({
       })
       setReviewThreads((current) => [thread, ...current])
       clearSelectedReviewThreadDraft()
+      // A thread-creating question goes to the agent by default.
+      void runAgentReplyForThread(thread.id)
     } catch (error) {
       setDraftError(reviewThreadErrorMessage(error))
     } finally {
@@ -459,6 +557,7 @@ export function ReviewWorkspace({
   }, [
     clearSelectedReviewThreadDraft,
     draftBody,
+    runAgentReplyForThread,
     selectedFile,
     selectedThreadAnchor,
     workspace.snapshot.headSha,
@@ -484,16 +583,20 @@ export function ReviewWorkspace({
                 onSubmit: submitReviewThreadDraft,
               }
             : null,
+        askingAgentThreadId,
         replyBodies,
         replyingThreadId,
         threadErrors,
         threads: visibleThreads,
         updatingStatusThreadId,
+        onAskAgent: askAgentInThread,
         onReplyBodyChange: updateReplyBody,
         onReplySubmit: submitReviewThreadReply,
         onStatusChange: updateReviewThreadStatusFromAnnotation,
       }),
     [
+      askAgentInThread,
+      askingAgentThreadId,
       clearSelectedReviewThreadDraft,
       draftBody,
       draftError,
@@ -669,7 +772,9 @@ function countFilesByStatus(files: ReviewFile[]): Record<string, number> {
 }
 
 function buildReviewThreadAnnotations(input: {
+  askingAgentThreadId: string | null
   draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
+  onAskAgent: (threadId: string) => void
   onReplyBodyChange: (threadId: string, body: string) => void
   onReplySubmit: (threadId: string) => void
   onStatusChange: (threadId: string, status: 'open' | 'resolved') => void
@@ -684,11 +789,13 @@ function buildReviewThreadAnnotations(input: {
       lineNumber: thread.lineStart,
       metadata: {
         error: input.threadErrors[thread.id] || null,
+        isAskingAgent: input.askingAgentThreadId === thread.id,
         isReplying: input.replyingThreadId === thread.id,
         isUpdatingStatus: input.updatingStatusThreadId === thread.id,
         kind: 'thread',
         replyBody: input.replyBodies[thread.id] ?? '',
         thread,
+        onAskAgent: () => input.onAskAgent(thread.id),
         onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
         onReplySubmit: () => input.onReplySubmit(thread.id),
         onStatusChange: (status) => input.onStatusChange(thread.id, status),
