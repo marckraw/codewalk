@@ -1,9 +1,19 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { DiffLineAnnotation, SelectedLineRange } from '@pierre/diffs'
 import { GitCompareArrows, GitPullRequestArrow, ListTree } from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import {
+  addReviewThreadComment,
+  buildReviewThreadSelectionAnchor,
+  createReviewThread,
+  listReviewThreads,
+  pierreSideFromReviewThreadDiffSide,
+  updateReviewThreadStatus,
+  type ReviewThread,
+} from '@/entities/review-thread'
 import { FileRail } from './file-rail'
 import { GuideEmptyPane } from './guide-empty-pane'
 import { GuidePreparingPane } from './guide-preparing-pane'
@@ -12,6 +22,8 @@ import { GuideView } from './guide-view'
 import { ModeButton } from './mode-button'
 import { PierreDiffViewer } from './pierre-diff-viewer'
 import { PullRequestStatusBadge } from './pull-request-status-badge'
+import { ReviewThreadAnnotation } from './review-thread-annotation.presentational'
+import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
 import type {
   ReviewFile,
   ReviewMode,
@@ -80,6 +92,22 @@ export function ReviewWorkspace({
   const guideSectionRefs = useRef(new Map<string, HTMLElement>())
   const guideFileRefs = useRef(new Map<string, HTMLElement>())
   const hasAppliedInitialDeepLink = useRef(false)
+  const [selectedLines, setSelectedLines] = useState<SelectedLineRange | null>(
+    null,
+  )
+  const [reviewThreads, setReviewThreads] = useState<ReviewThread[]>([])
+  const [reviewThreadLoadError, setReviewThreadLoadError] = useState<
+    string | null
+  >(null)
+  const [draftBody, setDraftBody] = useState('')
+  const [draftError, setDraftError] = useState<string | null>(null)
+  const [isPostingDraft, setIsPostingDraft] = useState(false)
+  const [replyBodies, setReplyBodies] = useState<Record<string, string>>({})
+  const [threadErrors, setThreadErrors] = useState<Record<string, string>>({})
+  const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null)
+  const [updatingStatusThreadId, setUpdatingStatusThreadId] = useState<
+    string | null
+  >(null)
 
   const statusCounts = useMemo(
     () => countFilesByStatus(workspace.files),
@@ -124,6 +152,54 @@ export function ReviewWorkspace({
   const selectedFileStatus = selectedFile
     ? (statusByPath.get(selectedFile) ?? null)
     : null
+  const selectedThreadAnchor = useMemo(
+    () =>
+      buildReviewThreadSelectionAnchor({
+        patch: selectedDiff,
+        range: selectedLines,
+      }),
+    [selectedDiff, selectedLines],
+  )
+  const visibleThreads = useMemo(
+    () =>
+      selectedFile
+        ? reviewThreads.filter((thread) => thread.filePath === selectedFile)
+        : [],
+    [reviewThreads, selectedFile],
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadThreads() {
+      setReviewThreadLoadError(null)
+
+      try {
+        const threads = await listReviewThreads({
+          number: workspace.snapshot.number,
+          owner: workspace.snapshot.owner,
+          repo: workspace.snapshot.repo,
+        })
+        if (!cancelled) {
+          setReviewThreads(threads)
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setReviewThreadLoadError(reviewThreadErrorMessage(error))
+        }
+      }
+    }
+
+    void loadThreads()
+
+    return () => {
+      cancelled = true
+    }
+  }, [
+    workspace.snapshot.number,
+    workspace.snapshot.owner,
+    workspace.snapshot.repo,
+  ])
 
   useEffect(() => {
     if (
@@ -226,14 +302,28 @@ export function ReviewWorkspace({
     }
   }, [effectiveActiveGuideSectionId, selectedFile, selectedView])
 
-  const handleSelectFile = useCallback((filePath: string) => {
-    setSelectedFile(filePath)
+  const clearSelectedReviewThreadDraft = useCallback(() => {
+    setSelectedLines(null)
+    setDraftBody('')
+    setDraftError(null)
   }, [])
 
-  const handleStatusFilterChange = useCallback((nextFilter: string) => {
-    setStatusFilter(nextFilter)
-    setSelectedFile(null)
-  }, [])
+  const handleSelectFile = useCallback(
+    (filePath: string) => {
+      setSelectedFile(filePath)
+      clearSelectedReviewThreadDraft()
+    },
+    [clearSelectedReviewThreadDraft],
+  )
+
+  const handleStatusFilterChange = useCallback(
+    (nextFilter: string) => {
+      setStatusFilter(nextFilter)
+      setSelectedFile(null)
+      clearSelectedReviewThreadDraft()
+    },
+    [clearSelectedReviewThreadDraft],
+  )
 
   const handleSelectGuideSection = useCallback((sectionId: string) => {
     setActiveGuideSectionId(sectionId)
@@ -242,12 +332,185 @@ export function ReviewWorkspace({
       ?.scrollIntoView({ block: 'start', inline: 'nearest' })
   }, [])
 
-  const handleSelectGuideFile = useCallback((filePath: string) => {
-    setSelectedFile(filePath)
-    guideFileRefs.current
-      .get(filePath)
-      ?.scrollIntoView({ block: 'start', inline: 'nearest' })
+  const handleSelectGuideFile = useCallback(
+    (filePath: string) => {
+      setSelectedFile(filePath)
+      guideFileRefs.current
+        .get(filePath)
+        ?.scrollIntoView({ block: 'start', inline: 'nearest' })
+      clearSelectedReviewThreadDraft()
+    },
+    [clearSelectedReviewThreadDraft],
+  )
+
+  const updateReplyBody = useCallback((threadId: string, body: string) => {
+    setReplyBodies((current) => ({ ...current, [threadId]: body }))
   }, [])
+
+  const updateReviewThreadStatusFromAnnotation = useCallback(
+    async (threadId: string, status: 'open' | 'resolved') => {
+      setUpdatingStatusThreadId(threadId)
+      setThreadErrors((current) => ({ ...current, [threadId]: '' }))
+
+      try {
+        const updated = await updateReviewThreadStatus({ status, threadId })
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === threadId
+              ? {
+                  ...thread,
+                  status: updated.status,
+                  updatedAt: updated.updatedAt,
+                }
+              : thread,
+          ),
+        )
+      } catch (error) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: reviewThreadErrorMessage(error),
+        }))
+      } finally {
+        setUpdatingStatusThreadId(null)
+      }
+    },
+    [],
+  )
+
+  const submitReviewThreadReply = useCallback(
+    async (threadId: string) => {
+      const body = replyBodies[threadId]?.trim() ?? ''
+
+      if (!body) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: 'Enter a reply before posting.',
+        }))
+        return
+      }
+
+      setReplyingThreadId(threadId)
+      setThreadErrors((current) => ({ ...current, [threadId]: '' }))
+
+      try {
+        const comment = await addReviewThreadComment({ body, threadId })
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === threadId
+              ? { ...thread, comments: [...thread.comments, comment] }
+              : thread,
+          ),
+        )
+        setReplyBodies((current) => ({ ...current, [threadId]: '' }))
+      } catch (error) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: reviewThreadErrorMessage(error),
+        }))
+      } finally {
+        setReplyingThreadId(null)
+      }
+    },
+    [replyBodies],
+  )
+
+  const submitReviewThreadDraft = useCallback(async () => {
+    if (!selectedFile) {
+      setDraftError('Select a file before starting a thread.')
+      return
+    }
+
+    if (!selectedThreadAnchor.ok) {
+      setDraftError(selectedThreadAnchor.error)
+      return
+    }
+
+    const body = draftBody.trim()
+
+    if (!body) {
+      setDraftError('Enter a comment before starting a thread.')
+      return
+    }
+
+    setDraftError(null)
+    setIsPostingDraft(true)
+
+    try {
+      const thread = await createReviewThread({
+        anchorCommitSha: workspace.snapshot.headSha,
+        anchorSnapshotId: workspace.snapshot.id,
+        body,
+        excerpt: selectedThreadAnchor.anchor.excerpt,
+        filePath: selectedFile,
+        lineEnd: selectedThreadAnchor.anchor.lineEnd,
+        lineStart: selectedThreadAnchor.anchor.lineStart,
+        number: workspace.snapshot.number,
+        owner: workspace.snapshot.owner,
+        repo: workspace.snapshot.repo,
+        side: selectedThreadAnchor.anchor.side,
+      })
+      setReviewThreads((current) => [thread, ...current])
+      clearSelectedReviewThreadDraft()
+    } catch (error) {
+      setDraftError(reviewThreadErrorMessage(error))
+    } finally {
+      setIsPostingDraft(false)
+    }
+  }, [
+    clearSelectedReviewThreadDraft,
+    draftBody,
+    selectedFile,
+    selectedThreadAnchor,
+    workspace.snapshot.headSha,
+    workspace.snapshot.id,
+    workspace.snapshot.number,
+    workspace.snapshot.owner,
+    workspace.snapshot.repo,
+  ])
+
+  const reviewThreadAnnotations = useMemo(
+    () =>
+      buildReviewThreadAnnotations({
+        draft:
+          selectedFile && selectedThreadAnchor.ok
+            ? {
+                anchor: selectedThreadAnchor.anchor,
+                body: draftBody,
+                error: draftError,
+                isSubmitting: isPostingDraft,
+                kind: 'draft',
+                onBodyChange: setDraftBody,
+                onCancel: clearSelectedReviewThreadDraft,
+                onSubmit: submitReviewThreadDraft,
+              }
+            : null,
+        replyBodies,
+        replyingThreadId,
+        threadErrors,
+        threads: visibleThreads,
+        updatingStatusThreadId,
+        onReplyBodyChange: updateReplyBody,
+        onReplySubmit: submitReviewThreadReply,
+        onStatusChange: updateReviewThreadStatusFromAnnotation,
+      }),
+    [
+      clearSelectedReviewThreadDraft,
+      draftBody,
+      draftError,
+      isPostingDraft,
+      replyBodies,
+      replyingThreadId,
+      selectedFile,
+      selectedThreadAnchor,
+      submitReviewThreadDraft,
+      submitReviewThreadReply,
+      threadErrors,
+      updateReplyBody,
+      updateReviewThreadStatusFromAnnotation,
+      updatingStatusThreadId,
+      visibleThreads,
+    ],
+  )
 
   const renderGuideSectionRef = useCallback(
     (sectionId: string) => (node: HTMLElement | null) => {
@@ -370,10 +633,21 @@ export function ReviewWorkspace({
               visibleFiles={visibleFiles}
             />
             <main className="min-w-0 overflow-hidden">
+              {reviewThreadLoadError ? (
+                <div className="border-b border-[var(--border)] bg-[var(--panel-subtle)] px-3 py-2 text-xs text-[var(--danger)]">
+                  {reviewThreadLoadError}
+                </div>
+              ) : null}
               <PierreDiffViewer
                 diff={selectedDiff}
                 file={selectedFile}
                 fileStatus={selectedFileStatus}
+                lineAnnotations={reviewThreadAnnotations}
+                onSelectedLinesChange={setSelectedLines}
+                renderAnnotation={(annotation) => (
+                  <ReviewThreadAnnotation annotation={annotation.metadata} />
+                )}
+                selectedLines={selectedLines}
                 title="Pull request diff"
               />
             </main>
@@ -392,4 +666,47 @@ function countFilesByStatus(files: ReviewFile[]): Record<string, number> {
   }
 
   return counts
+}
+
+function buildReviewThreadAnnotations(input: {
+  draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
+  onReplyBodyChange: (threadId: string, body: string) => void
+  onReplySubmit: (threadId: string) => void
+  onStatusChange: (threadId: string, status: 'open' | 'resolved') => void
+  replyingThreadId: string | null
+  replyBodies: Record<string, string>
+  threadErrors: Record<string, string>
+  threads: ReviewThread[]
+  updatingStatusThreadId: string | null
+}): DiffLineAnnotation<ReviewThreadAnnotationData>[] {
+  const annotations: DiffLineAnnotation<ReviewThreadAnnotationData>[] =
+    input.threads.map((thread) => ({
+      lineNumber: thread.lineStart,
+      metadata: {
+        error: input.threadErrors[thread.id] || null,
+        isReplying: input.replyingThreadId === thread.id,
+        isUpdatingStatus: input.updatingStatusThreadId === thread.id,
+        kind: 'thread',
+        replyBody: input.replyBodies[thread.id] ?? '',
+        thread,
+        onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
+        onReplySubmit: () => input.onReplySubmit(thread.id),
+        onStatusChange: (status) => input.onStatusChange(thread.id, status),
+      },
+      side: pierreSideFromReviewThreadDiffSide(thread.side),
+    }))
+
+  if (input.draft) {
+    annotations.push({
+      lineNumber: input.draft.anchor.lineEnd,
+      metadata: input.draft,
+      side: pierreSideFromReviewThreadDiffSide(input.draft.anchor.side),
+    })
+  }
+
+  return annotations
+}
+
+function reviewThreadErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : 'Review threads unavailable.'
 }

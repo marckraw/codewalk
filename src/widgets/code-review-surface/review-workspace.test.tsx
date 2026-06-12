@@ -1,6 +1,15 @@
-import { cleanup, render, screen, within } from '@testing-library/react'
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { ReactNode } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ReviewThread } from '@/entities/review-thread'
+import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
 import type { ReviewWorkspace as ReviewWorkspaceModel } from './review-types'
 
 vi.mock('next/navigation', () => ({
@@ -8,9 +17,54 @@ vi.mock('next/navigation', () => ({
 }))
 
 // Stub the heavy Pierre-backed leaves so we exercise the orchestration only.
+vi.mock('@/entities/review-thread', async () => {
+  const actual = await vi.importActual<
+    typeof import('@/entities/review-thread')
+  >('@/entities/review-thread')
+
+  return {
+    ...actual,
+    addReviewThreadComment: vi.fn(),
+    createReviewThread: vi.fn(),
+    listReviewThreads: vi.fn(() => Promise.resolve([])),
+    updateReviewThreadStatus: vi.fn(),
+  }
+})
+
 vi.mock('./pierre-diff-viewer', () => ({
-  PierreDiffViewer: ({ file }: { file: string | null }) => (
-    <div data-testid="diff-pane">{file ?? 'no-file'}</div>
+  PierreDiffViewer: ({
+    file,
+    lineAnnotations = [],
+    onSelectedLinesChange,
+    renderAnnotation,
+  }: {
+    file: string | null
+    lineAnnotations?: Array<{ metadata: ReviewThreadAnnotationData }>
+    onSelectedLinesChange?: (range: {
+      end: number
+      side: 'additions'
+      start: number
+    }) => void
+    renderAnnotation?: (annotation: {
+      metadata: ReviewThreadAnnotationData
+    }) => ReactNode
+  }) => (
+    <div data-testid="diff-pane">
+      <span>{file ?? 'no-file'}</span>
+      <button
+        onClick={() =>
+          onSelectedLinesChange?.({ end: 1, side: 'additions', start: 1 })
+        }
+        type="button"
+      >
+        Select line 1
+      </button>
+      {lineAnnotations.map((annotation, index) => (
+        <div data-testid="diff-annotation" key={index}>
+          {renderAnnotation?.(annotation)}
+        </div>
+      ))}
+    </div>
   ),
 }))
 
@@ -37,6 +91,10 @@ vi.mock('./changed-files-tree', () => ({
 }))
 
 import { ReviewWorkspace } from './review-workspace'
+import { createReviewThread, listReviewThreads } from '@/entities/review-thread'
+
+const mockedCreateReviewThread = vi.mocked(createReviewThread)
+const mockedListReviewThreads = vi.mocked(listReviewThreads)
 
 function makeWorkspace(): ReviewWorkspaceModel {
   return {
@@ -75,6 +133,7 @@ function makeWorkspace(): ReviewWorkspaceModel {
     prStatus: 'ready_for_review',
     snapshot: {
       baseRef: 'main',
+      headSha: 'head-sha',
       headRef: 'feature',
       id: 'snap-1',
       number: 7,
@@ -88,6 +147,12 @@ function makeWorkspace(): ReviewWorkspaceModel {
 }
 
 describe('ReviewWorkspace', () => {
+  beforeEach(() => {
+    mockedCreateReviewThread.mockReset()
+    mockedListReviewThreads.mockReset()
+    mockedListReviewThreads.mockResolvedValue([])
+  })
+
   afterEach(() => cleanup())
 
   it('defaults to the guide view when a guide exists', () => {
@@ -140,4 +205,81 @@ describe('ReviewWorkspace', () => {
       screen.getByRole('button', { name: /modified 1/ }),
     ).toBeInTheDocument()
   })
+
+  it('renders existing review threads as diff annotations', async () => {
+    const user = userEvent.setup()
+    mockedListReviewThreads.mockResolvedValue([makeReviewThread()])
+
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    await user.click(screen.getByRole('button', { name: /Diff/ }))
+
+    expect(await screen.findByText(/Thread on new line 1/)).toBeInTheDocument()
+    expect(screen.getByText('Why did this change?')).toBeInTheDocument()
+  })
+
+  it('creates a review thread from a selected diff line', async () => {
+    const user = userEvent.setup()
+    mockedCreateReviewThread.mockResolvedValue(
+      makeReviewThread({ body: 'What guarantees this path?' }),
+    )
+
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    await user.click(screen.getByRole('button', { name: /Diff/ }))
+    await user.click(screen.getByRole('button', { name: 'Select line 1' }))
+    await user.type(
+      screen.getByLabelText('Review thread comment'),
+      'What guarantees this path?',
+    )
+    await user.click(screen.getByRole('button', { name: /Start thread/ }))
+
+    await waitFor(() => {
+      expect(mockedCreateReviewThread).toHaveBeenCalledWith({
+        anchorCommitSha: 'head-sha',
+        anchorSnapshotId: 'snap-1',
+        body: 'What guarantees this path?',
+        excerpt: '1: b',
+        filePath: 'src/a.ts',
+        lineEnd: 1,
+        lineStart: 1,
+        number: 7,
+        owner: 'ef-global',
+        repo: 'backpack',
+        side: 'new',
+      })
+    })
+    expect(screen.getByText('What guarantees this path?')).toBeInTheDocument()
+  })
 })
+
+function makeReviewThread(input?: { body?: string }): ReviewThread {
+  return {
+    anchorCommitSha: 'head-sha',
+    anchorSnapshotId: 'snap-1',
+    comments: [
+      {
+        agentState: null,
+        authorType: 'user',
+        authorUserId: 'user-1',
+        body: input?.body ?? 'Why did this change?',
+        createdAt: '2026-06-12T10:00:00.000Z',
+        id: 'comment-1',
+        threadId: 'thread-1',
+      },
+    ],
+    createdAt: '2026-06-12T10:00:00.000Z',
+    createdByUserId: 'user-1',
+    excerpt: '1: b',
+    filePath: 'src/a.ts',
+    id: 'thread-1',
+    lineEnd: 1,
+    lineStart: 1,
+    owner: 'ef-global',
+    pullRequestNumber: 7,
+    repo: 'backpack',
+    side: 'new',
+    status: 'open',
+    updatedAt: '2026-06-12T10:00:00.000Z',
+  }
+}
