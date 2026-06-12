@@ -2,12 +2,15 @@ import 'server-only'
 
 import {
   AgentsDaemonClient,
+  AgentsDaemonClientError,
   getAgentsDaemonConfig,
   parseAgentsDaemonConversationItems,
   type AgentsDaemonExecutionSessionSnapshot,
 } from '@/entities/agents-daemon'
 import {
   addReviewThreadComment,
+  claimReviewThreadAgentTurn,
+  getReviewAgentSessionForPullRequest,
   getReviewThread,
   updateReviewAgentSessionFromSnapshot,
   updateReviewThreadComment,
@@ -19,62 +22,35 @@ import {
   PullRequestReviewAgentSessionError,
 } from './pr-review-agent-session.service'
 import {
-  buildReviewAgentTurnQueueKey,
   buildReviewThreadAgentQuestionPrompt,
-  extractAgentReplyText,
+  extractAgentReplyAfterLastUserMessage,
 } from './pr-review-agent-session.pure'
 
-export type AskPullRequestReviewAgentInput = {
-  client?: Pick<
-    AgentsDaemonClient,
-    | 'getExecutionSession'
-    | 'sendExecutionSessionMessage'
-    | 'startExecutionSession'
-  >
-  pollIntervalMs?: number
-  requestedByUserId: string | null
-  threadId: string
-  timeoutMs?: number
-  sleep?: (ms: number) => Promise<void>
-}
+export type ReviewAgentReplyClient = Pick<
+  AgentsDaemonClient,
+  | 'getExecutionSession'
+  | 'sendExecutionSessionMessage'
+  | 'startExecutionSession'
+>
 
-export type AskPullRequestReviewAgentResult = {
-  agentComment: ReviewThreadCommentRow
+export type ReviewAgentReplyResult = {
   thread: ReviewThreadWithComments
 }
 
-const DEFAULT_POLL_INTERVAL_MS = 2_000
-const DEFAULT_TURN_TIMEOUT_MS = 240_000
-
 /**
- * Serializes agent turns per pull request: the daemon session runs one
- * provider turn at a time, so concurrent questions queue in arrival order.
- * In-memory only — cross-instance locking is P8's concern.
+ * Starts an agent reply for the latest reviewer question in the thread and
+ * returns immediately: a pending agent comment is persisted, the daemon
+ * session is ensured, and — when the session is already idle — the question
+ * is sent. Turn completion is observed by advancePullRequestReviewAgentReply,
+ * which the client polls. Nothing here outlives a short request, so serverless
+ * time limits cannot kill a turn half-way anymore: a dying process leaves a
+ * pending comment that the next poll adopts and finishes.
  */
-const reviewAgentTurnQueues = new Map<string, Promise<unknown>>()
-
-function enqueueReviewAgentTurn<T>(
-  key: string,
-  task: () => Promise<T>,
-): Promise<T> {
-  const tail = reviewAgentTurnQueues.get(key) ?? Promise.resolve()
-  const next = tail.then(task, task)
-  reviewAgentTurnQueues.set(
-    key,
-    next.catch(() => undefined),
-  )
-  return next
-}
-
-/**
- * Answers the latest reviewer question in a thread with the per-PR daemon
- * agent: creates a pending agent comment, waits for the session to go idle,
- * records the conversation baseline, sends the anchored question, polls the
- * turn to completion, and fills the comment with the assistant reply.
- */
-export async function askPullRequestReviewAgent(
-  input: AskPullRequestReviewAgentInput,
-): Promise<AskPullRequestReviewAgentResult> {
+export async function startPullRequestReviewAgentReply(input: {
+  client?: ReviewAgentReplyClient
+  requestedByUserId: string | null
+  threadId: string
+}): Promise<ReviewAgentReplyResult> {
   const thread = await getReviewThread(input.threadId)
 
   if (!thread) {
@@ -85,9 +61,7 @@ export async function askPullRequestReviewAgent(
     )
   }
 
-  const question = latestReviewerQuestion(thread)
-
-  if (!question) {
+  if (!latestReviewerQuestion(thread)) {
     throw new PullRequestReviewAgentSessionError(
       'not-found',
       'The thread has no reviewer question to answer.',
@@ -103,7 +77,13 @@ export async function askPullRequestReviewAgent(
     )
   }
 
-  const agentComment = await addReviewThreadComment({
+  if (thread.comments.some(isPendingAgentComment)) {
+    // An agent turn for this thread is already in flight; polling will pick
+    // it up. Do not stack a second pending comment.
+    return { thread }
+  }
+
+  await addReviewThreadComment({
     agentState: 'pending',
     authorType: 'agent',
     authorUserId: null,
@@ -111,29 +91,200 @@ export async function askPullRequestReviewAgent(
     threadId: thread.id,
   })
 
+  const client = input.client ?? createConfiguredClient()
+
   try {
-    await enqueueReviewAgentTurn(buildReviewAgentTurnQueueKey(thread), () =>
-      runReviewAgentTurn({ agentCommentId: agentComment.id, input, thread }),
-    )
-  } catch (error) {
-    const message =
-      error instanceof Error
-        ? error.message
-        : 'The review agent failed to answer.'
-    await updateReviewThreadComment({
-      agentState: 'error',
-      body: message,
-      commentId: agentComment.id,
+    await ensurePullRequestReviewAgentSession({
+      client,
+      requestedByUserId: input.requestedByUserId,
+      snapshotId: thread.anchorSnapshotId,
     })
+  } catch (error) {
+    await failPendingAgentComments(thread.id, describeTurnError(error))
     throw error
   }
 
-  const updatedThread = await getReviewThread(thread.id)
-  const updatedComment = updatedThread?.comments.find(
-    (comment) => comment.id === agentComment.id,
-  )
+  return advancePullRequestReviewAgentReply({
+    client,
+    threadId: thread.id,
+  })
+}
 
-  if (!updatedThread || !updatedComment) {
+/**
+ * One step of the agent turn state machine, safe to call repeatedly:
+ * - daemon session failed or lost mid-turn -> pending comment becomes error;
+ * - session idle and an unsent question exists -> claim it (optimistic,
+ *   cross-instance safe) and send the question;
+ * - session idle after our question's seq -> extract the assistant reply and
+ *   complete the comment;
+ * - otherwise the turn is still running and nothing changes.
+ */
+export async function advancePullRequestReviewAgentReply(input: {
+  client?: ReviewAgentReplyClient
+  threadId: string
+}): Promise<ReviewAgentReplyResult> {
+  const thread = await getReviewThread(input.threadId)
+
+  if (!thread) {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'Review thread was not found.',
+      404,
+    )
+  }
+
+  const pending = thread.comments.filter(isPendingAgentComment)
+
+  if (pending.length === 0) {
+    return { thread }
+  }
+
+  const session = await getReviewAgentSessionForPullRequest({
+    owner: thread.owner,
+    pullRequestNumber: thread.pullRequestNumber,
+    repo: thread.repo,
+  })
+
+  if (!session) {
+    await failPendingAgentComments(
+      thread.id,
+      'No agent session exists for this pull request. Ask the agent again.',
+    )
+    return refreshedThread(thread.id)
+  }
+
+  const client = input.client ?? createConfiguredClient()
+  let snapshot: AgentsDaemonExecutionSessionSnapshot
+
+  try {
+    snapshot = await client.getExecutionSession(session.daemonSessionId)
+  } catch (error) {
+    if (isMissingSessionError(error)) {
+      // The daemon restarted. Unsent questions can recover via a fresh
+      // ensure on the next start; a question that was mid-turn is gone.
+      await failPendingAgentComments(
+        thread.id,
+        'The agent session was lost (daemon restart). Ask the agent again.',
+      )
+      return refreshedThread(thread.id)
+    }
+
+    throw toReplyError(error)
+  }
+
+  if (snapshot.status === 'failed') {
+    await failPendingAgentComments(
+      thread.id,
+      'The agent session failed while answering. Ask the agent again.',
+    )
+    await persistSessionSnapshot(session.id, snapshot)
+    return refreshedThread(thread.id)
+  }
+
+  const oldest = pending[0]
+
+  if (oldest.agentSeqStart === null) {
+    if (isIdle(snapshot)) {
+      await claimAndSendQuestion({ client, snapshot, thread, oldest })
+    }
+    return refreshedThread(thread.id)
+  }
+
+  if (isIdle(snapshot) && snapshot.lastSeq > oldest.agentSeqStart) {
+    const replyText = extractAgentReplyAfterLastUserMessage(
+      parseAgentsDaemonConversationItems(snapshot.conversation),
+    )
+
+    await updateReviewThreadComment({
+      agentState: 'complete',
+      body:
+        replyText ??
+        'The agent finished the turn without a text reply. Check the daemon session for details.',
+      commentId: oldest.id,
+    })
+    await persistSessionSnapshot(session.id, snapshot)
+  }
+
+  return refreshedThread(thread.id)
+}
+
+async function claimAndSendQuestion(params: {
+  client: ReviewAgentReplyClient
+  oldest: ReviewThreadCommentRow
+  snapshot: AgentsDaemonExecutionSessionSnapshot
+  thread: ReviewThreadWithComments
+}): Promise<void> {
+  const { client, oldest, snapshot, thread } = params
+  const claimed = await claimReviewThreadAgentTurn({
+    agentSeqStart: snapshot.lastSeq,
+    commentId: oldest.id,
+  })
+
+  if (!claimed) {
+    return
+  }
+
+  const question = latestReviewerQuestion(thread)
+
+  try {
+    await client.sendExecutionSessionMessage({
+      sessionId: snapshot.sessionId,
+      text: buildReviewThreadAgentQuestionPrompt({
+        anchor: thread,
+        history: thread.comments
+          .filter((comment) => comment.body.trim() && comment.body !== question)
+          .map((comment) => ({
+            authorType: comment.authorType,
+            body: comment.body,
+          })),
+        question: question ?? '',
+      }),
+    })
+  } catch (error) {
+    await updateReviewThreadComment({
+      agentState: 'error',
+      body: describeTurnError(error),
+      commentId: oldest.id,
+    })
+    throw toReplyError(error)
+  }
+}
+
+async function persistSessionSnapshot(
+  sessionRowId: string,
+  snapshot: AgentsDaemonExecutionSessionSnapshot,
+): Promise<void> {
+  await updateReviewAgentSessionFromSnapshot({
+    continuationToken: snapshot.continuationToken,
+    id: sessionRowId,
+    lastSeq: snapshot.lastSeq,
+    prUrl: snapshot.prUrl,
+    status: snapshot.status,
+    workspace: snapshot.workspace,
+  })
+}
+
+async function failPendingAgentComments(
+  threadId: string,
+  message: string,
+): Promise<void> {
+  const thread = await getReviewThread(threadId)
+
+  for (const comment of thread?.comments.filter(isPendingAgentComment) ?? []) {
+    await updateReviewThreadComment({
+      agentState: 'error',
+      body: message,
+      commentId: comment.id,
+    })
+  }
+}
+
+async function refreshedThread(
+  threadId: string,
+): Promise<ReviewAgentReplyResult> {
+  const thread = await getReviewThread(threadId)
+
+  if (!thread) {
     throw new PullRequestReviewAgentSessionError(
       'unexpected',
       'The review thread disappeared while the agent was answering.',
@@ -141,140 +292,15 @@ export async function askPullRequestReviewAgent(
     )
   }
 
-  return { agentComment: updatedComment, thread: updatedThread }
+  return { thread }
 }
 
-async function runReviewAgentTurn(params: {
-  agentCommentId: string
-  input: AskPullRequestReviewAgentInput
-  thread: ReviewThreadWithComments
-}): Promise<void> {
-  const { agentCommentId, input, thread } = params
-  const client = input.client ?? createConfiguredClient()
-  const sleep = input.sleep ?? defaultSleep
-  const pollIntervalMs = input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS
-  const timeoutMs = input.timeoutMs ?? DEFAULT_TURN_TIMEOUT_MS
-
-  const ensured = await ensurePullRequestReviewAgentSession({
-    client,
-    requestedByUserId: input.requestedByUserId,
-    snapshotId: thread.anchorSnapshotId as string,
-  })
-
-  const idle = await waitForExecutionSessionTurnEnd({
-    client,
-    minConversationLength: 0,
-    pollIntervalMs,
-    sessionId: ensured.daemonSnapshot.sessionId,
-    sleep,
-    snapshot: ensured.daemonSnapshot,
-    timeoutMs,
-  })
-
-  const baseline = idle.conversation.length
-
-  await updateReviewThreadComment({
-    agentSeqStart: idle.lastSeq,
-    commentId: agentCommentId,
-  })
-
-  await client.sendExecutionSessionMessage({
-    sessionId: idle.sessionId,
-    text: buildReviewThreadAgentQuestionPrompt({
-      anchor: thread,
-      history: thread.comments
-        .slice(0, -1)
-        .filter((comment) => comment.body.trim())
-        .map((comment) => ({
-          authorType: comment.authorType,
-          body: comment.body,
-        })),
-      question: latestReviewerQuestion(thread) ?? '',
-    }),
-  })
-
-  const finished = await waitForExecutionSessionTurnEnd({
-    client,
-    minConversationLength: baseline + 1,
-    pollIntervalMs,
-    sessionId: idle.sessionId,
-    sleep,
-    snapshot: null,
-    timeoutMs,
-  })
-
-  const replyText = extractAgentReplyText(
-    parseAgentsDaemonConversationItems(finished.conversation),
-    baseline,
-  )
-
-  await updateReviewThreadComment({
-    agentState: 'complete',
-    body:
-      replyText ??
-      'The agent finished the turn without a text reply. Check the daemon session for details.',
-    commentId: agentCommentId,
-  })
-
-  await updateReviewAgentSessionFromSnapshot({
-    continuationToken: finished.continuationToken,
-    id: ensured.session.id,
-    lastSeq: finished.lastSeq,
-    prUrl: finished.prUrl,
-    status: finished.status,
-    workspace: finished.workspace,
-  })
+function isPendingAgentComment(comment: ReviewThreadCommentRow): boolean {
+  return comment.authorType === 'agent' && comment.agentState === 'pending'
 }
 
-async function waitForExecutionSessionTurnEnd(params: {
-  client: Pick<AgentsDaemonClient, 'getExecutionSession'>
-  minConversationLength: number
-  pollIntervalMs: number
-  sessionId: string
-  sleep: (ms: number) => Promise<void>
-  snapshot: AgentsDaemonExecutionSessionSnapshot | null
-  timeoutMs: number
-}): Promise<AgentsDaemonExecutionSessionSnapshot> {
-  const startedAt = Date.now()
-  let snapshot = params.snapshot
-
-  for (;;) {
-    if (snapshot && isExecutionTurnSettled(snapshot, params)) {
-      return snapshot
-    }
-
-    if (Date.now() - startedAt > params.timeoutMs) {
-      throw new PullRequestReviewAgentSessionError(
-        'daemon',
-        'Timed out waiting for the review agent to finish its turn.',
-        504,
-      )
-    }
-
-    if (snapshot) {
-      await params.sleep(params.pollIntervalMs)
-    }
-
-    snapshot = await params.client.getExecutionSession(params.sessionId)
-
-    if (snapshot.status === 'failed') {
-      throw new PullRequestReviewAgentSessionError(
-        'daemon',
-        'The review agent session failed while answering.',
-        502,
-      )
-    }
-  }
-}
-
-function isExecutionTurnSettled(
-  snapshot: AgentsDaemonExecutionSessionSnapshot,
-  params: { minConversationLength: number },
-): boolean {
-  return (
-    (snapshot.status === 'idle' || snapshot.status === 'completed') &&
-    snapshot.conversation.length >= params.minConversationLength
-  )
+function isIdle(snapshot: AgentsDaemonExecutionSessionSnapshot): boolean {
+  return snapshot.status === 'idle' || snapshot.status === 'completed'
 }
 
 function latestReviewerQuestion(
@@ -291,6 +317,42 @@ function latestReviewerQuestion(
   return null
 }
 
+function isMissingSessionError(error: unknown): boolean {
+  return (
+    error instanceof AgentsDaemonClientError &&
+    error.code === 'daemon-error' &&
+    error.details.status === 404
+  )
+}
+
+function describeTurnError(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : 'The review agent failed to answer.'
+}
+
+function toReplyError(error: unknown): PullRequestReviewAgentSessionError {
+  if (error instanceof PullRequestReviewAgentSessionError) {
+    return error
+  }
+
+  if (error instanceof AgentsDaemonClientError) {
+    return new PullRequestReviewAgentSessionError(
+      'daemon',
+      error.message,
+      error.details.status ?? 502,
+      error,
+    )
+  }
+
+  return new PullRequestReviewAgentSessionError(
+    'unexpected',
+    describeTurnError(error),
+    500,
+    error,
+  )
+}
+
 function createConfiguredClient(): AgentsDaemonClient {
   const config = getAgentsDaemonConfig()
 
@@ -303,8 +365,4 @@ function createConfiguredClient(): AgentsDaemonClient {
   }
 
   return new AgentsDaemonClient(config.config)
-}
-
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms))
 }

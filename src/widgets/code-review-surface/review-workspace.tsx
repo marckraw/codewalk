@@ -9,8 +9,11 @@ import {
   addReviewThreadComment,
   buildReviewThreadSelectionAnchor,
   createReviewThread,
+  extendReviewThreadSelection,
+  fetchReviewAgentSessionStatus,
   listReviewThreads,
   pierreSideFromReviewThreadDiffSide,
+  pollReviewThreadAgentReply,
   requestReviewThreadAgentReply,
   updateReviewThreadStatus,
   type ReviewThread,
@@ -106,12 +109,12 @@ export function ReviewWorkspace({
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({})
   const [threadErrors, setThreadErrors] = useState<Record<string, string>>({})
   const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null)
-  const [askingAgentThreadId, setAskingAgentThreadId] = useState<string | null>(
-    null,
-  )
+  const [agentActivity, setAgentActivity] = useState<string | null>(null)
   const [updatingStatusThreadId, setUpdatingStatusThreadId] = useState<
     string | null
   >(null)
+  const shiftPressedRef = useRef(false)
+  const selectionFileRef = useRef<string | null>(null)
 
   const statusCounts = useMemo(
     () => countFilesByStatus(workspace.files),
@@ -171,6 +174,129 @@ export function ReviewWorkspace({
         : [],
     [reviewThreads, selectedFile],
   )
+  const threadsByFile = useMemo(() => {
+    const map = new Map<string, ReviewThread[]>()
+
+    for (const thread of reviewThreads) {
+      const list = map.get(thread.filePath)
+      if (list) {
+        list.push(thread)
+      } else {
+        map.set(thread.filePath, [thread])
+      }
+    }
+
+    return map
+  }, [reviewThreads])
+
+  /**
+   * Single selection across both views: selecting lines in any file (diff
+   * pane or a guide file diff) makes that file the active one, and
+   * shift-click extends the previous range within the same file.
+   */
+  const handleFileSelectedLinesChange = useCallback(
+    (filePath: string, range: SelectedLineRange | null) => {
+      const sameFile = selectionFileRef.current === filePath
+      selectionFileRef.current = filePath
+      setSelectedFile(filePath)
+      setSelectedLines((previous) =>
+        extendReviewThreadSelection({
+          next: range,
+          previous: sameFile ? previous : null,
+          shiftKey: shiftPressedRef.current,
+        }),
+      )
+    },
+    [],
+  )
+
+  // Shift state for GitHub-style shift-click range extension in the gutter.
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      shiftPressedRef.current = event.shiftKey
+    }
+
+    window.addEventListener('keydown', handleKey)
+    window.addEventListener('keyup', handleKey)
+
+    return () => {
+      window.removeEventListener('keydown', handleKey)
+      window.removeEventListener('keyup', handleKey)
+    }
+  }, [])
+
+  // Threads whose latest agent comment is still pending. Derived from data so
+  // a page refresh (or another viewer's question) resumes polling naturally.
+  const pendingAgentThreadIds = useMemo(
+    () =>
+      reviewThreads
+        .filter((thread) =>
+          thread.comments.some(
+            (comment) =>
+              comment.authorType === 'agent' &&
+              comment.agentState === 'pending',
+          ),
+        )
+        .map((thread) => thread.id),
+    [reviewThreads],
+  )
+  const pendingAgentThreadsKey = pendingAgentThreadIds.join(',')
+
+  // Drive pending turns to completion: each tick advances the server-side
+  // state machine (send when idle, complete when the turn ended) and merges
+  // the updated thread. The turn itself never lives inside one request, so
+  // serverless time limits cannot orphan it.
+  useEffect(() => {
+    if (!pendingAgentThreadsKey) {
+      setAgentActivity(null)
+      return
+    }
+
+    let cancelled = false
+
+    async function pollPendingThreads() {
+      for (const threadId of pendingAgentThreadsKey.split(',')) {
+        try {
+          const updated = await pollReviewThreadAgentReply(threadId)
+          if (cancelled) return
+          setReviewThreads((current) =>
+            current.map((thread) =>
+              thread.id === updated.id ? updated : thread,
+            ),
+          )
+        } catch {
+          // Transient polling errors are retried on the next tick; terminal
+          // failures land on the comment row server-side.
+        }
+      }
+
+      try {
+        const status = await fetchReviewAgentSessionStatus({
+          number: workspace.snapshot.number,
+          owner: workspace.snapshot.owner,
+          repo: workspace.snapshot.repo,
+        })
+        if (!cancelled) {
+          setAgentActivity(status.activity ?? status.state)
+        }
+      } catch {
+        // Activity is decorative; polling errors must not surface.
+      }
+    }
+
+    void pollPendingThreads()
+    const interval = setInterval(() => void pollPendingThreads(), 3_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [
+    pendingAgentThreadsKey,
+    workspace.snapshot.number,
+    workspace.snapshot.owner,
+    workspace.snapshot.repo,
+  ])
 
   useEffect(() => {
     let cancelled = false
@@ -381,32 +507,12 @@ export function ReviewWorkspace({
     [],
   )
 
+  /**
+   * Kicks off an agent turn. The request returns as soon as the question is
+   * queued (with the pending agent comment persisted server-side); the
+   * polling effect above drives it to completion.
+   */
   const runAgentReplyForThread = useCallback(async (threadId: string) => {
-    const placeholderId = `pending-agent-${threadId}`
-
-    setAskingAgentThreadId(threadId)
-    setReviewThreads((current) =>
-      current.map((thread) =>
-        thread.id === threadId
-          ? {
-              ...thread,
-              comments: [
-                ...thread.comments,
-                {
-                  agentState: 'pending',
-                  authorType: 'agent',
-                  authorUserId: null,
-                  body: '',
-                  createdAt: new Date().toISOString(),
-                  id: placeholderId,
-                  threadId,
-                },
-              ],
-            }
-          : thread,
-      ),
-    )
-
     try {
       const updated = await requestReviewThreadAgentReply(threadId)
       setReviewThreads((current) =>
@@ -414,22 +520,19 @@ export function ReviewWorkspace({
       )
     } catch (error) {
       const message = reviewThreadErrorMessage(error)
-      setReviewThreads((current) =>
-        current.map((thread) =>
-          thread.id === threadId
-            ? {
-                ...thread,
-                comments: thread.comments.map((comment) =>
-                  comment.id === placeholderId
-                    ? { ...comment, agentState: 'error', body: message }
-                    : comment,
-                ),
-              }
-            : thread,
-        ),
-      )
-    } finally {
-      setAskingAgentThreadId(null)
+      setThreadErrors((current) => ({ ...current, [threadId]: message }))
+      // The server marks the pending comment as errored too; refresh so the
+      // thread shows it.
+      try {
+        const refreshed = await pollReviewThreadAgentReply(threadId)
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === refreshed.id ? refreshed : thread,
+          ),
+        )
+      } catch {
+        // The inline thread error above is enough.
+      }
     }
   }, [])
 
@@ -567,52 +670,75 @@ export function ReviewWorkspace({
     workspace.snapshot.repo,
   ])
 
-  const reviewThreadAnnotations = useMemo(
+  const draftAnnotation = useMemo(
     () =>
-      buildReviewThreadAnnotations({
-        draft:
-          selectedFile && selectedThreadAnchor.ok
-            ? {
-                anchor: selectedThreadAnchor.anchor,
-                body: draftBody,
-                error: draftError,
-                isSubmitting: isPostingDraft,
-                kind: 'draft',
-                onBodyChange: setDraftBody,
-                onCancel: clearSelectedReviewThreadDraft,
-                onSubmit: submitReviewThreadDraft,
-              }
-            : null,
-        askingAgentThreadId,
-        replyBodies,
-        replyingThreadId,
-        threadErrors,
-        threads: visibleThreads,
-        updatingStatusThreadId,
-        onAskAgent: askAgentInThread,
-        onReplyBodyChange: updateReplyBody,
-        onReplySubmit: submitReviewThreadReply,
-        onStatusChange: updateReviewThreadStatusFromAnnotation,
-      }),
+      selectedFile && selectedThreadAnchor.ok
+        ? ({
+            anchor: selectedThreadAnchor.anchor,
+            body: draftBody,
+            error: draftError,
+            isSubmitting: isPostingDraft,
+            kind: 'draft' as const,
+            onBodyChange: setDraftBody,
+            onCancel: clearSelectedReviewThreadDraft,
+            onSubmit: submitReviewThreadDraft,
+          } satisfies Extract<ReviewThreadAnnotationData, { kind: 'draft' }>)
+        : null,
     [
-      askAgentInThread,
-      askingAgentThreadId,
       clearSelectedReviewThreadDraft,
       draftBody,
       draftError,
       isPostingDraft,
-      replyBodies,
-      replyingThreadId,
       selectedFile,
       selectedThreadAnchor,
       submitReviewThreadDraft,
-      submitReviewThreadReply,
+    ],
+  )
+  const threadAnnotationHandlers = useMemo(
+    () => ({
+      agentActivity,
+      replyBodies,
+      replyingThreadId,
+      threadErrors,
+      updatingStatusThreadId,
+      onAskAgent: askAgentInThread,
+      onReplyBodyChange: updateReplyBody,
+      onReplySubmit: submitReviewThreadReply,
+      onStatusChange: updateReviewThreadStatusFromAnnotation,
+    }),
+    [
+      agentActivity,
+      askAgentInThread,
+      replyBodies,
+      replyingThreadId,
       threadErrors,
       updateReplyBody,
       updateReviewThreadStatusFromAnnotation,
+      submitReviewThreadReply,
       updatingStatusThreadId,
-      visibleThreads,
     ],
+  )
+  const reviewThreadAnnotations = useMemo(
+    () =>
+      buildReviewThreadAnnotations({
+        ...threadAnnotationHandlers,
+        draft: draftAnnotation,
+        threads: visibleThreads,
+      }),
+    [draftAnnotation, threadAnnotationHandlers, visibleThreads],
+  )
+  const getGuideFileAnnotations = useCallback(
+    (filePath: string) =>
+      buildReviewThreadAnnotations({
+        ...threadAnnotationHandlers,
+        draft: selectedFile === filePath ? draftAnnotation : null,
+        threads: threadsByFile.get(filePath) ?? [],
+      }),
+    [draftAnnotation, selectedFile, threadAnnotationHandlers, threadsByFile],
+  )
+  const getGuideFileSelectedLines = useCallback(
+    (filePath: string) => (selectedFile === filePath ? selectedLines : null),
+    [selectedFile, selectedLines],
   )
 
   const renderGuideSectionRef = useCallback(
@@ -713,10 +839,16 @@ export function ReviewWorkspace({
               <GuidePreparingPane />
             ) : workspace.guide ? (
               <GuideView
+                getFileAnnotations={getGuideFileAnnotations}
                 getFileDiff={(filePath) => diffByPath.get(filePath) ?? ''}
+                getFileSelectedLines={getGuideFileSelectedLines}
                 guide={workspace.guide}
                 isFileLoading={() => false}
+                onFileSelectedLinesChange={handleFileSelectedLinesChange}
                 onSelectFile={handleSelectGuideFile}
+                renderAnnotation={(annotation) => (
+                  <ReviewThreadAnnotation annotation={annotation.metadata} />
+                )}
                 renderFileRef={renderGuideFileRef}
                 renderSectionRef={renderGuideSectionRef}
               />
@@ -746,7 +878,12 @@ export function ReviewWorkspace({
                 file={selectedFile}
                 fileStatus={selectedFileStatus}
                 lineAnnotations={reviewThreadAnnotations}
-                onSelectedLinesChange={setSelectedLines}
+                onSelectedLinesChange={
+                  selectedFile
+                    ? (range) =>
+                        handleFileSelectedLinesChange(selectedFile, range)
+                    : undefined
+                }
                 renderAnnotation={(annotation) => (
                   <ReviewThreadAnnotation annotation={annotation.metadata} />
                 )}
@@ -772,7 +909,7 @@ function countFilesByStatus(files: ReviewFile[]): Record<string, number> {
 }
 
 function buildReviewThreadAnnotations(input: {
-  askingAgentThreadId: string | null
+  agentActivity: string | null
   draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
   onAskAgent: (threadId: string) => void
   onReplyBodyChange: (threadId: string, body: string) => void
@@ -785,23 +922,31 @@ function buildReviewThreadAnnotations(input: {
   updatingStatusThreadId: string | null
 }): DiffLineAnnotation<ReviewThreadAnnotationData>[] {
   const annotations: DiffLineAnnotation<ReviewThreadAnnotationData>[] =
-    input.threads.map((thread) => ({
-      lineNumber: thread.lineStart,
-      metadata: {
-        error: input.threadErrors[thread.id] || null,
-        isAskingAgent: input.askingAgentThreadId === thread.id,
-        isReplying: input.replyingThreadId === thread.id,
-        isUpdatingStatus: input.updatingStatusThreadId === thread.id,
-        kind: 'thread',
-        replyBody: input.replyBodies[thread.id] ?? '',
-        thread,
-        onAskAgent: () => input.onAskAgent(thread.id),
-        onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
-        onReplySubmit: () => input.onReplySubmit(thread.id),
-        onStatusChange: (status) => input.onStatusChange(thread.id, status),
-      },
-      side: pierreSideFromReviewThreadDiffSide(thread.side),
-    }))
+    input.threads.map((thread) => {
+      const hasPendingAgentComment = thread.comments.some(
+        (comment) =>
+          comment.authorType === 'agent' && comment.agentState === 'pending',
+      )
+
+      return {
+        lineNumber: thread.lineStart,
+        metadata: {
+          agentActivity: hasPendingAgentComment ? input.agentActivity : null,
+          error: input.threadErrors[thread.id] || null,
+          isAskingAgent: hasPendingAgentComment,
+          isReplying: input.replyingThreadId === thread.id,
+          isUpdatingStatus: input.updatingStatusThreadId === thread.id,
+          kind: 'thread',
+          replyBody: input.replyBodies[thread.id] ?? '',
+          thread,
+          onAskAgent: () => input.onAskAgent(thread.id),
+          onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
+          onReplySubmit: () => input.onReplySubmit(thread.id),
+          onStatusChange: (status) => input.onStatusChange(thread.id, status),
+        },
+        side: pierreSideFromReviewThreadDiffSide(thread.side),
+      }
+    })
 
   if (input.draft) {
     annotations.push({

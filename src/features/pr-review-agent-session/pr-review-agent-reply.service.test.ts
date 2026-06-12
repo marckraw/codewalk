@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { AgentsDaemonClientError } from '@/entities/agents-daemon'
 import {
   addReviewThreadComment,
+  claimReviewThreadAgentTurn,
+  getReviewAgentSessionForPullRequest,
   getReviewThread,
   updateReviewAgentSessionFromSnapshot,
   updateReviewThreadComment,
 } from '@/entities/database'
 import { ensurePullRequestReviewAgentSession } from './pr-review-agent-session.service'
-import { askPullRequestReviewAgent } from './pr-review-agent-reply.service'
+import {
+  advancePullRequestReviewAgentReply,
+  startPullRequestReviewAgentReply,
+} from './pr-review-agent-reply.service'
 
 vi.mock('server-only', () => ({}))
 
@@ -18,6 +24,8 @@ vi.mock('@/entities/database', async () => {
   return {
     ...actual,
     addReviewThreadComment: vi.fn(),
+    claimReviewThreadAgentTurn: vi.fn(),
+    getReviewAgentSessionForPullRequest: vi.fn(),
     getReviewThread: vi.fn(),
     updateReviewAgentSessionFromSnapshot: vi.fn(),
     updateReviewThreadComment: vi.fn(),
@@ -37,52 +45,65 @@ vi.mock('./pr-review-agent-session.service', async () => {
 
 const mockedGetReviewThread = vi.mocked(getReviewThread)
 const mockedAddReviewThreadComment = vi.mocked(addReviewThreadComment)
+const mockedClaimReviewThreadAgentTurn = vi.mocked(claimReviewThreadAgentTurn)
+const mockedGetSession = vi.mocked(getReviewAgentSessionForPullRequest)
 const mockedUpdateReviewThreadComment = vi.mocked(updateReviewThreadComment)
 const mockedUpdateSessionFromSnapshot = vi.mocked(
   updateReviewAgentSessionFromSnapshot,
 )
 const mockedEnsureSession = vi.mocked(ensurePullRequestReviewAgentSession)
 
-const thread = {
-  id: 'thread-1',
-  owner: 'ef-global',
-  repo: 'backpack',
-  pullRequestNumber: 42,
-  anchorSnapshotId: 'snapshot-1',
-  anchorCommitSha: 'abc123',
-  filePath: 'src/auth.ts',
-  side: 'new' as const,
-  lineStart: 10,
-  lineEnd: 14,
-  excerpt: 'const token = parse(header)',
-  status: 'open' as const,
-  createdByUserId: 'user-1',
+const questionComment = {
+  id: 'comment-1',
+  threadId: 'thread-1',
+  authorType: 'user' as const,
+  authorUserId: 'user-1',
+  body: 'Why is this safe?',
+  agentState: null,
+  agentSeqStart: null,
   createdAt: new Date('2026-06-12T10:00:00Z'),
-  updatedAt: new Date('2026-06-12T10:00:00Z'),
-  comments: [
-    {
-      id: 'comment-1',
-      threadId: 'thread-1',
-      authorType: 'user' as const,
-      authorUserId: 'user-1',
-      body: 'Why is this safe?',
-      agentState: null,
-      agentSeqStart: null,
-      createdAt: new Date('2026-06-12T10:00:00Z'),
-    },
-  ],
 }
 
-const agentComment = {
+const pendingUnsent = {
   id: 'comment-2',
   threadId: 'thread-1',
   authorType: 'agent' as const,
   authorUserId: null,
   body: '',
   agentState: 'pending' as const,
-  agentSeqStart: null,
+  agentSeqStart: null as number | null,
   createdAt: new Date('2026-06-12T10:00:05Z'),
 }
+
+const pendingSent = { ...pendingUnsent, agentSeqStart: 3 }
+
+function makeThread(
+  comments: Array<typeof questionComment | typeof pendingUnsent>,
+) {
+  return {
+    id: 'thread-1',
+    owner: 'ef-global',
+    repo: 'backpack',
+    pullRequestNumber: 42,
+    anchorSnapshotId: 'snapshot-1',
+    anchorCommitSha: 'abc123',
+    filePath: 'src/auth.ts',
+    side: 'new' as const,
+    lineStart: 10,
+    lineEnd: 14,
+    excerpt: 'const token = parse(header)',
+    status: 'open' as const,
+    createdByUserId: 'user-1',
+    createdAt: new Date('2026-06-12T10:00:00Z'),
+    updatedAt: new Date('2026-06-12T10:00:00Z'),
+    comments,
+  }
+}
+
+const sessionRow = {
+  daemonSessionId: 'daemon-1',
+  id: 'session-row-1',
+} as never
 
 function daemonSnapshot(input: {
   conversation?: unknown[]
@@ -101,15 +122,11 @@ function daemonSnapshot(input: {
     providerId: 'codex',
     sessionId: 'daemon-1',
     status: input.status ?? 'idle',
-    workspace: {
-      baseRef: 'main',
-      branchName: 'agent/codewalk',
-      repository: 'https://github.com/ef-global/backpack',
-    },
+    workspace: null,
   }
 }
 
-const bootConversation = [
+const answeredConversation = [
   {
     actor: 'user',
     id: 'i-1',
@@ -124,10 +141,6 @@ const bootConversation = [
     state: 'complete',
     text: 'Ready.',
   },
-]
-
-const answeredConversation = [
-  ...bootConversation,
   {
     actor: 'user',
     id: 'i-3',
@@ -144,221 +157,181 @@ const answeredConversation = [
   },
 ]
 
-const threadWithAgentReply = {
-  ...thread,
-  comments: [
-    ...thread.comments,
-    {
-      ...agentComment,
-      agentState: 'complete' as const,
-      body: 'It validates the token before use.',
-    },
-  ],
+function makeClient(snapshots: ReturnType<typeof daemonSnapshot>[]) {
+  const getExecutionSession = vi.fn()
+  for (const snapshot of snapshots) {
+    getExecutionSession.mockResolvedValueOnce(snapshot)
+  }
+
+  return {
+    getExecutionSession,
+    sendExecutionSessionMessage: vi.fn().mockResolvedValue({ accepted: true }),
+    startExecutionSession: vi.fn(),
+  }
 }
 
-describe('askPullRequestReviewAgent', () => {
+describe('review agent reply state machine', () => {
   beforeEach(() => {
-    mockedGetReviewThread.mockImplementation(async (threadId) =>
-      threadId === 'thread-1' ? threadWithAgentReply : null,
-    )
-    mockedAddReviewThreadComment.mockResolvedValue(agentComment)
-    mockedUpdateReviewThreadComment.mockImplementation(async (input) => ({
-      ...agentComment,
-      agentSeqStart: input.agentSeqStart ?? agentComment.agentSeqStart,
-      agentState: input.agentState ?? agentComment.agentState,
-      body: input.body ?? agentComment.body,
-    }))
+    mockedAddReviewThreadComment.mockResolvedValue(pendingUnsent)
+    mockedClaimReviewThreadAgentTurn.mockResolvedValue(pendingSent)
+    mockedGetSession.mockResolvedValue(sessionRow)
+    mockedUpdateReviewThreadComment.mockResolvedValue(pendingSent)
     mockedUpdateSessionFromSnapshot.mockResolvedValue({} as never)
     mockedEnsureSession.mockResolvedValue({
       action: 'reused',
-      daemonSnapshot: daemonSnapshot({ conversation: bootConversation }),
-      session: { id: 'session-row-1' } as never,
-    })
+      daemonSnapshot: daemonSnapshot({}),
+      session: sessionRow,
+    } as never)
   })
 
   afterEach(() => {
     vi.clearAllMocks()
   })
 
-  it('answers the thread question with the assistant reply from the turn', async () => {
-    const client = {
-      getExecutionSession: vi
-        .fn()
-        .mockResolvedValueOnce(
-          daemonSnapshot({ conversation: bootConversation }),
-        )
-        .mockResolvedValueOnce(
-          daemonSnapshot({
-            conversation: answeredConversation,
-            lastSeq: 9,
-          }),
-        ),
-      sendExecutionSessionMessage: vi.fn().mockResolvedValue({
-        accepted: true,
-      }),
-      startExecutionSession: vi.fn(),
-    }
+  it('start creates the pending comment and sends the question when idle', async () => {
     mockedGetReviewThread
-      .mockResolvedValueOnce(thread)
-      .mockResolvedValueOnce(threadWithAgentReply)
+      .mockResolvedValueOnce(makeThread([questionComment]))
+      .mockResolvedValue(makeThread([questionComment, pendingUnsent]))
+    const client = makeClient([daemonSnapshot({ status: 'idle' })])
 
-    const result = await askPullRequestReviewAgent({
+    await startPullRequestReviewAgentReply({
       client,
       requestedByUserId: 'user-1',
-      sleep: async () => {},
       threadId: 'thread-1',
     })
 
-    expect(result.agentComment).toMatchObject({
-      agentState: 'complete',
-      body: 'It validates the token before use.',
+    expect(mockedAddReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({ agentState: 'pending', authorType: 'agent' }),
+    )
+    expect(mockedEnsureSession).toHaveBeenCalled()
+    expect(mockedClaimReviewThreadAgentTurn).toHaveBeenCalledWith({
+      agentSeqStart: 3,
+      commentId: 'comment-2',
+    })
+    const sent = client.sendExecutionSessionMessage.mock.calls[0]?.[0]
+    expect(sent.sessionId).toBe('daemon-1')
+    expect(sent.text).toContain('Question: Why is this safe?')
+    expect(sent.text).toContain('File: src/auth.ts')
+  })
+
+  it('start does not stack a second pending comment', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingUnsent]),
+    )
+
+    await startPullRequestReviewAgentReply({
+      client: makeClient([]),
+      requestedByUserId: 'user-1',
+      threadId: 'thread-1',
     })
 
-    const sentText = client.sendExecutionSessionMessage.mock.calls[0]?.[0]?.text
-    expect(sentText).toContain('File: src/auth.ts')
-    expect(sentText).toContain('Question: Why is this safe?')
+    expect(mockedAddReviewThreadComment).not.toHaveBeenCalled()
+    expect(mockedEnsureSession).not.toHaveBeenCalled()
+  })
 
-    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
-      expect.objectContaining({ agentSeqStart: 3, commentId: 'comment-2' }),
+  it('advance waits silently while the session is running', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingUnsent]),
     )
-    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentState: 'complete',
-        body: 'It validates the token before use.',
-        commentId: 'comment-2',
+    const client = makeClient([daemonSnapshot({ status: 'running' })])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(mockedClaimReviewThreadAgentTurn).not.toHaveBeenCalled()
+    expect(client.sendExecutionSessionMessage).not.toHaveBeenCalled()
+    expect(mockedUpdateReviewThreadComment).not.toHaveBeenCalled()
+  })
+
+  it('advance sends an unsent question once the session is idle', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingUnsent]),
+    )
+    const client = makeClient([daemonSnapshot({ status: 'idle' })])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(mockedClaimReviewThreadAgentTurn).toHaveBeenCalled()
+    expect(client.sendExecutionSessionMessage).toHaveBeenCalledTimes(1)
+  })
+
+  it('advance does not send when the optimistic claim is lost', async () => {
+    mockedClaimReviewThreadAgentTurn.mockResolvedValue(null)
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingUnsent]),
+    )
+    const client = makeClient([daemonSnapshot({ status: 'idle' })])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(client.sendExecutionSessionMessage).not.toHaveBeenCalled()
+  })
+
+  it('advance completes a sent question after the turn ended', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingSent]),
+    )
+    const client = makeClient([
+      daemonSnapshot({
+        conversation: answeredConversation,
+        lastSeq: 9,
+        status: 'idle',
       }),
-    )
+    ])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith({
+      agentState: 'complete',
+      body: 'It validates the token before use.',
+      commentId: 'comment-2',
+    })
     expect(mockedUpdateSessionFromSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'session-row-1', lastSeq: 9 }),
     )
   })
 
-  it('waits for a running boot turn before sending the question', async () => {
-    const client = {
-      getExecutionSession: vi
-        .fn()
-        .mockResolvedValueOnce(daemonSnapshot({ status: 'running' }))
-        .mockResolvedValueOnce(
-          daemonSnapshot({ conversation: bootConversation }),
-        )
-        .mockResolvedValueOnce(
-          daemonSnapshot({ conversation: answeredConversation }),
-        ),
-      sendExecutionSessionMessage: vi.fn().mockResolvedValue({
-        accepted: true,
-      }),
-      startExecutionSession: vi.fn(),
-    }
-    mockedEnsureSession.mockResolvedValue({
-      action: 'created',
-      daemonSnapshot: daemonSnapshot({ status: 'running' }),
-      session: { id: 'session-row-1' } as never,
-    })
+  it('advance keeps waiting when the seq has not moved past the claim', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingSent]),
+    )
+    const client = makeClient([daemonSnapshot({ lastSeq: 3, status: 'idle' })])
 
-    await askPullRequestReviewAgent({
-      client,
-      requestedByUserId: 'user-1',
-      sleep: async () => {},
-      threadId: 'thread-1',
-    })
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
 
-    expect(client.getExecutionSession).toHaveBeenCalledTimes(3)
-    expect(client.sendExecutionSessionMessage).toHaveBeenCalledTimes(1)
+    expect(mockedUpdateReviewThreadComment).not.toHaveBeenCalled()
   })
 
-  it('marks the agent comment as errored when the daemon turn fails', async () => {
-    const client = {
-      getExecutionSession: vi
-        .fn()
-        .mockResolvedValueOnce(
-          daemonSnapshot({ conversation: bootConversation }),
-        )
-        .mockResolvedValueOnce(daemonSnapshot({ status: 'failed' })),
-      sendExecutionSessionMessage: vi.fn().mockResolvedValue({
-        accepted: true,
-      }),
-      startExecutionSession: vi.fn(),
-    }
+  it('advance errors pending comments when the daemon session failed', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingSent]),
+    )
+    const client = makeClient([daemonSnapshot({ status: 'failed' })])
 
-    await expect(
-      askPullRequestReviewAgent({
-        client,
-        requestedByUserId: 'user-1',
-        sleep: async () => {},
-        threadId: 'thread-1',
-      }),
-    ).rejects.toThrow('failed while answering')
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
 
     expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentState: 'error',
-        commentId: 'comment-2',
-      }),
+      expect.objectContaining({ agentState: 'error', commentId: 'comment-2' }),
     )
   })
 
-  it('rejects threads without an anchored snapshot', async () => {
-    mockedGetReviewThread.mockResolvedValue({
-      ...thread,
-      anchorSnapshotId: null,
-    })
-
-    await expect(
-      askPullRequestReviewAgent({
-        requestedByUserId: 'user-1',
-        threadId: 'thread-1',
-      }),
-    ).rejects.toThrow('not linked to an imported pull request snapshot')
-
-    expect(mockedAddReviewThreadComment).not.toHaveBeenCalled()
-  })
-
-  it('queues a second question until the first turn completes', async () => {
-    let resolveFirstTurn: (() => void) | undefined
-    const firstTurnGate = new Promise<void>((resolve) => {
-      resolveFirstTurn = resolve
-    })
-    const order: string[] = []
-
+  it('advance errors pending comments when the daemon session is gone', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingSent]),
+    )
     const client = {
-      getExecutionSession: vi.fn().mockImplementation(async () => {
-        return daemonSnapshot({ conversation: answeredConversation })
-      }),
-      sendExecutionSessionMessage: vi
-        .fn()
-        .mockImplementationOnce(async () => {
-          order.push('first-send')
-          await firstTurnGate
-          return { accepted: true }
-        })
-        .mockImplementationOnce(async () => {
-          order.push('second-send')
-          return { accepted: true }
+      getExecutionSession: vi.fn().mockRejectedValue(
+        new AgentsDaemonClientError('daemon-error', 'Session not found', {
+          status: 404,
         }),
+      ),
+      sendExecutionSessionMessage: vi.fn(),
       startExecutionSession: vi.fn(),
     }
 
-    const first = askPullRequestReviewAgent({
-      client,
-      requestedByUserId: 'user-1',
-      sleep: async () => {},
-      threadId: 'thread-1',
-    })
-    const second = askPullRequestReviewAgent({
-      client,
-      requestedByUserId: 'user-1',
-      sleep: async () => {},
-      threadId: 'thread-1',
-    })
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
 
-    await vi.waitFor(() => {
-      expect(order).toContain('first-send')
-    })
-    expect(order).not.toContain('second-send')
-
-    resolveFirstTurn?.()
-    await Promise.all([first, second])
-
-    expect(order).toEqual(['first-send', 'second-send'])
+    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({ agentState: 'error', commentId: 'comment-2' }),
+    )
   })
 })

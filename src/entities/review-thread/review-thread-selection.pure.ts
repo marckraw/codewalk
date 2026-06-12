@@ -70,6 +70,37 @@ export function normalizeReviewThreadSelection(
   }
 }
 
+/**
+ * Shift-click range extension: when the reviewer shift-clicks a line while a
+ * selection exists on the same side, the selection grows to span both ranges
+ * (GitHub's gutter behavior). Any other combination replaces the selection.
+ */
+export function extendReviewThreadSelection(input: {
+  next: SelectedLineRange | null
+  previous: SelectedLineRange | null
+  shiftKey: boolean
+}): SelectedLineRange | null {
+  const { next, previous, shiftKey } = input
+
+  if (!shiftKey || !previous || !next) {
+    return next
+  }
+
+  const previousSide = previous.side ?? previous.endSide ?? 'additions'
+  const nextSide = next.side ?? next.endSide ?? 'additions'
+
+  if (previousSide !== nextSide) {
+    return next
+  }
+
+  return {
+    end: Math.max(previous.start, previous.end, next.start, next.end),
+    endSide: nextSide,
+    side: nextSide,
+    start: Math.min(previous.start, previous.end, next.start, next.end),
+  }
+}
+
 export function reviewThreadDiffSideFromPierreSide(
   side: SelectionSide,
 ): ReviewThreadDiffSide {
