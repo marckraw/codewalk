@@ -7,13 +7,19 @@ import {
 } from './config'
 import {
   buildAgentsDaemonGenerateGuideRequestBody,
+  buildAgentsDaemonExecutionStartRequestBody,
   buildAgentsDaemonSubmitGuideJobRequestBody,
   buildAgentsDaemonUrl,
+  parseAgentsDaemonExecutionSessionSnapshot,
+  parseAgentsDaemonExecutionStartResult,
   parseAgentsDaemonGenerateGuideResult,
   parseAgentsDaemonGuideJob,
   parseAgentsDaemonGuideJobSubmitResult,
   parseAgentsDaemonHealth,
   parseAgentsDaemonMeta,
+  type AgentsDaemonExecutionSessionSnapshot,
+  type AgentsDaemonExecutionStartInput,
+  type AgentsDaemonExecutionStartResult,
   type AgentsDaemonGenerateGuideInput,
   type AgentsDaemonGenerateGuideResult,
   type AgentsDaemonGuideJob,
@@ -127,6 +133,34 @@ export class AgentsDaemonClient {
     return this.requestJson(
       `/v0/code-review-guides/jobs/${encodeURIComponent(jobId)}`,
       parseAgentsDaemonGuideJob,
+      {
+        authenticated: true,
+        timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
+      },
+    )
+  }
+
+  async startExecutionSession(
+    input: AgentsDaemonExecutionStartInput,
+  ): Promise<AgentsDaemonExecutionStartResult> {
+    return this.requestJson(
+      '/v0/execution/sessions',
+      parseAgentsDaemonExecutionStartResult,
+      {
+        authenticated: true,
+        body: buildAgentsDaemonExecutionStartRequestBody(input),
+        method: 'POST',
+        timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
+      },
+    )
+  }
+
+  async getExecutionSession(
+    sessionId: string,
+  ): Promise<AgentsDaemonExecutionSessionSnapshot> {
+    return this.requestJson(
+      `/v0/execution/sessions/${encodeURIComponent(sessionId)}`,
+      parseAgentsDaemonExecutionSessionSnapshot,
       {
         authenticated: true,
         timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,

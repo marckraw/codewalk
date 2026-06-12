@@ -147,6 +147,70 @@ export type AgentsDaemonGuideJob = {
   result: AgentsDaemonGenerateGuideResult | null
 }
 
+export const EXECUTION_PROTOCOL_VERSION = 1
+
+export type AgentsDaemonExecutionSessionStatus =
+  | 'idle'
+  | 'running'
+  | 'completed'
+  | 'failed'
+
+export type AgentsDaemonExecutionStartInput = {
+  continuationToken?: string | null
+  effort?: string | null
+  initialMessage: string
+  model: string | null
+  providerId: string
+  sessionId: string
+  workspace?: {
+    branchName?: string | null
+    ref?: string | null
+    repository: string
+  }
+}
+
+export type AgentsDaemonExecutionStartRequestBody = {
+  protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
+  providerId: string
+  config: {
+    continuationToken: string | null
+    effort: string | null
+    initialMessage: string
+    model: string | null
+    sessionId: string
+    workingDirectory: string
+  }
+  workspace?: {
+    branchName?: string | null
+    ref?: string | null
+    repository: string
+  }
+}
+
+export type AgentsDaemonExecutionStartResult = {
+  protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
+  sessionId: string
+}
+
+export type AgentsDaemonExecutionSessionSnapshot = {
+  protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
+  sessionId: string
+  providerId: string
+  status: AgentsDaemonExecutionSessionStatus
+  attention: string
+  activity: string | null
+  continuationToken: string | null
+  contextWindow: unknown | null
+  conversation: unknown[]
+  lastSeq: number
+  workspace: {
+    baseRef: string
+    branchName: string
+    repository: string
+  } | null
+  prUrl: string | null
+}
+
 export type AgentsDaemonBaseUrlResolution =
   | { ok: true; baseUrl: string }
   | { ok: false; reason: 'missing' | 'invalid' }
@@ -247,6 +311,97 @@ export function buildAgentsDaemonSubmitGuideJobRequestBody(
   }
 }
 
+export function buildAgentsDaemonExecutionStartRequestBody(
+  input: AgentsDaemonExecutionStartInput,
+): AgentsDaemonExecutionStartRequestBody {
+  const sessionId = input.sessionId.trim()
+  const providerId = input.providerId.trim()
+  const initialMessage = input.initialMessage.trim()
+
+  if (!sessionId) {
+    throw new Error('Execution sessions require a session id.')
+  }
+
+  if (!providerId) {
+    throw new Error('Execution sessions require a provider id.')
+  }
+
+  if (!initialMessage) {
+    throw new Error('Execution sessions require an initial message.')
+  }
+
+  return {
+    config: {
+      continuationToken: input.continuationToken?.trim() || null,
+      effort: input.effort?.trim() || null,
+      initialMessage,
+      model: input.model?.trim() || null,
+      sessionId,
+      workingDirectory: '/tmp',
+    },
+    ...(input.workspace
+      ? {
+          workspace: {
+            ...(input.workspace.branchName
+              ? { branchName: input.workspace.branchName }
+              : {}),
+            ...(input.workspace.ref ? { ref: input.workspace.ref } : {}),
+            repository: input.workspace.repository,
+          },
+        }
+      : {}),
+    protocolVersion: EXECUTION_PROTOCOL_VERSION,
+    providerId,
+  }
+}
+
+export function parseAgentsDaemonExecutionStartResult(
+  value: unknown,
+): AgentsDaemonExecutionStartResult {
+  const obj = requiredRecord(value, 'execution session start result')
+  const protocolVersion = requireNumber(obj.protocolVersion, 'protocolVersion')
+
+  if (protocolVersion !== EXECUTION_PROTOCOL_VERSION) {
+    throw new Error(
+      `Unsupported execution protocol version: ${protocolVersion}`,
+    )
+  }
+
+  return {
+    protocolVersion,
+    sessionId: requireString(obj.sessionId, 'sessionId'),
+  }
+}
+
+export function parseAgentsDaemonExecutionSessionSnapshot(
+  value: unknown,
+): AgentsDaemonExecutionSessionSnapshot {
+  const obj = requiredRecord(value, 'execution session snapshot')
+  const protocolVersion = requireNumber(obj.protocolVersion, 'protocolVersion')
+
+  if (protocolVersion !== EXECUTION_PROTOCOL_VERSION) {
+    throw new Error(
+      `Unsupported execution protocol version: ${protocolVersion}`,
+    )
+  }
+
+  return {
+    activity: typeof obj.activity === 'string' ? obj.activity : null,
+    attention: requireString(obj.attention, 'attention'),
+    contextWindow: obj.contextWindow ?? null,
+    continuationToken:
+      typeof obj.continuationToken === 'string' ? obj.continuationToken : null,
+    conversation: Array.isArray(obj.conversation) ? obj.conversation : [],
+    lastSeq: requireNumber(obj.lastSeq, 'lastSeq'),
+    prUrl: typeof obj.prUrl === 'string' ? obj.prUrl : null,
+    protocolVersion,
+    providerId: requireString(obj.providerId, 'providerId'),
+    sessionId: requireString(obj.sessionId, 'sessionId'),
+    status: parseExecutionSessionStatus(obj.status),
+    workspace: parseExecutionWorkspaceSnapshot(obj.workspace),
+  }
+}
+
 export function parseAgentsDaemonGuideJobSubmitResult(
   value: unknown,
 ): AgentsDaemonGuideJobSubmitResult {
@@ -286,6 +441,37 @@ function parseGuideJobStatus(value: unknown): AgentsDaemonGuideJobStatus {
   }
 
   throw new Error('Invalid guide job status')
+}
+
+function parseExecutionSessionStatus(
+  value: unknown,
+): AgentsDaemonExecutionSessionStatus {
+  if (
+    value === 'idle' ||
+    value === 'running' ||
+    value === 'completed' ||
+    value === 'failed'
+  ) {
+    return value
+  }
+
+  throw new Error('Invalid execution session status')
+}
+
+function parseExecutionWorkspaceSnapshot(
+  value: unknown,
+): AgentsDaemonExecutionSessionSnapshot['workspace'] {
+  if (value === null || value === undefined) {
+    return null
+  }
+
+  const obj = requiredRecord(value, 'execution session workspace')
+
+  return {
+    baseRef: requireString(obj.baseRef, 'workspace.baseRef'),
+    branchName: requireString(obj.branchName, 'workspace.branchName'),
+    repository: requireString(obj.repository, 'workspace.repository'),
+  }
 }
 
 export function parseAgentsDaemonHealth(value: unknown): AgentsDaemonHealth {
