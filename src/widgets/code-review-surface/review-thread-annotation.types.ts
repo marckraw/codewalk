@@ -15,6 +15,7 @@ export type ReviewThreadAnnotationData =
       onSubmit: () => void
     }
   | {
+      agentActivity: string | null
       error: string | null
       isAskingAgent: boolean
       isReplying: boolean

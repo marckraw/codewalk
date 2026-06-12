@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildReviewThreadSelectionAnchor,
+  extendReviewThreadSelection,
   extractDiffExcerpt,
   normalizeReviewThreadSelection,
   pierreSideFromReviewThreadDiffSide,
@@ -125,5 +126,56 @@ describe('review thread selection helpers', () => {
       },
       ok: true,
     })
+  })
+})
+
+describe('extendReviewThreadSelection', () => {
+  const previous = { end: 12, side: 'additions' as const, start: 10 }
+
+  it('replaces the selection without shift', () => {
+    const next = { end: 20, side: 'additions' as const, start: 20 }
+    expect(
+      extendReviewThreadSelection({ next, previous, shiftKey: false }),
+    ).toBe(next)
+  })
+
+  it('extends the selection to span both ranges with shift', () => {
+    expect(
+      extendReviewThreadSelection({
+        next: { end: 20, side: 'additions' as const, start: 20 },
+        previous,
+        shiftKey: true,
+      }),
+    ).toEqual({ end: 20, endSide: 'additions', side: 'additions', start: 10 })
+  })
+
+  it('extends upward when the shift-clicked line is above', () => {
+    expect(
+      extendReviewThreadSelection({
+        next: { end: 4, side: 'additions' as const, start: 4 },
+        previous,
+        shiftKey: true,
+      }),
+    ).toEqual({ end: 12, endSide: 'additions', side: 'additions', start: 4 })
+  })
+
+  it('replaces the selection when sides differ', () => {
+    const next = { end: 20, side: 'deletions' as const, start: 20 }
+    expect(
+      extendReviewThreadSelection({ next, previous, shiftKey: true }),
+    ).toBe(next)
+  })
+
+  it('passes through null and first selections', () => {
+    expect(
+      extendReviewThreadSelection({ next: null, previous, shiftKey: true }),
+    ).toBeNull()
+    expect(
+      extendReviewThreadSelection({
+        next: previous,
+        previous: null,
+        shiftKey: true,
+      }),
+    ).toBe(previous)
   })
 })

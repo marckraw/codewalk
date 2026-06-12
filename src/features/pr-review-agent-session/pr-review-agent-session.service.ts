@@ -215,6 +215,55 @@ async function updateStoredReviewAgentSessionFromDaemonSnapshot(input: {
   })
 }
 
+export type PullRequestReviewAgentSessionStatus = {
+  activity: string | null
+  state: 'none' | 'lost' | 'idle' | 'running' | 'completed' | 'failed'
+}
+
+/**
+ * Lightweight read used by the UI to show what the agent is doing while a
+ * reply is pending. Never creates or recreates sessions.
+ */
+export async function getPullRequestReviewAgentSessionStatus(input: {
+  client?: Pick<AgentsDaemonClient, 'getExecutionSession'>
+  owner: string
+  pullRequestNumber: number
+  repo: string
+}): Promise<PullRequestReviewAgentSessionStatus> {
+  const existing = await getReviewAgentSessionForPullRequest({
+    owner: input.owner,
+    pullRequestNumber: input.pullRequestNumber,
+    repo: input.repo,
+  })
+
+  if (!existing) {
+    return { activity: null, state: 'none' }
+  }
+
+  const config = getAgentsDaemonConfig()
+
+  if (!config.ok) {
+    throw new PullRequestReviewAgentSessionError(
+      'configuration',
+      config.message,
+      503,
+    )
+  }
+
+  const client = input.client ?? new AgentsDaemonClient(config.config)
+
+  try {
+    const snapshot = await client.getExecutionSession(existing.daemonSessionId)
+    return { activity: snapshot.activity, state: snapshot.status }
+  } catch (error) {
+    if (isMissingExecutionSessionError(error)) {
+      return { activity: null, state: 'lost' }
+    }
+
+    throw toReviewAgentSessionError(error)
+  }
+}
+
 /**
  * Best effort: the boot prompt is richer with the generated guide, but a PR
  * without a ready guide (or a workspace read failure) must not block the

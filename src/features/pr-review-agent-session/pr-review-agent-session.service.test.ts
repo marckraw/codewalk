@@ -8,7 +8,10 @@ import {
   type PullRequestSnapshotRow,
   type ReviewAgentSessionRow,
 } from '@/entities/database'
-import { ensurePullRequestReviewAgentSession } from './pr-review-agent-session.service'
+import {
+  ensurePullRequestReviewAgentSession,
+  getPullRequestReviewAgentSessionStatus,
+} from './pr-review-agent-session.service'
 
 vi.mock('server-only', () => ({}))
 
@@ -164,6 +167,55 @@ describe('ensurePullRequestReviewAgentSession', () => {
         continuationToken: 'thread-old',
       }),
     )
+  })
+
+  it('reports the live session activity without creating sessions', async () => {
+    mockedGetReviewAgentSessionForPullRequest.mockResolvedValue(storedSession)
+    const client = {
+      getExecutionSession: vi.fn().mockResolvedValue({
+        ...daemonSnapshot,
+        activity: 'tool:Read',
+        status: 'running' as const,
+      }),
+    }
+
+    await expect(
+      getPullRequestReviewAgentSessionStatus({
+        client,
+        owner: 'ef-global',
+        pullRequestNumber: 42,
+        repo: 'backpack',
+      }),
+    ).resolves.toEqual({ activity: 'tool:Read', state: 'running' })
+  })
+
+  it('reports none and lost states for missing sessions', async () => {
+    mockedGetReviewAgentSessionForPullRequest.mockResolvedValue(null)
+
+    await expect(
+      getPullRequestReviewAgentSessionStatus({
+        client: { getExecutionSession: vi.fn() },
+        owner: 'ef-global',
+        pullRequestNumber: 42,
+        repo: 'backpack',
+      }),
+    ).resolves.toEqual({ activity: null, state: 'none' })
+
+    mockedGetReviewAgentSessionForPullRequest.mockResolvedValue(storedSession)
+    await expect(
+      getPullRequestReviewAgentSessionStatus({
+        client: {
+          getExecutionSession: vi.fn().mockRejectedValue(
+            new AgentsDaemonClientError('daemon-error', 'Session not found', {
+              status: 404,
+            }),
+          ),
+        },
+        owner: 'ef-global',
+        pullRequestNumber: 42,
+        repo: 'backpack',
+      }),
+    ).resolves.toEqual({ activity: null, state: 'lost' })
   })
 })
 

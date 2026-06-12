@@ -139,6 +139,44 @@ export async function requestReviewThreadAgentReply(
   return body.thread
 }
 
+export type ReviewAgentSessionStatus = {
+  activity: string | null
+  state: 'none' | 'lost' | 'idle' | 'running' | 'completed' | 'failed'
+}
+
+/**
+ * Reads what the per-PR agent session is currently doing — shown next to a
+ * pending agent comment. Read-only; never starts a session.
+ */
+export async function fetchReviewAgentSessionStatus(
+  params: ListReviewThreadsParams,
+): Promise<ReviewAgentSessionStatus> {
+  const url = new URL(
+    '/api/review-agent-sessions/status',
+    window.location.origin,
+  )
+  url.searchParams.set('owner', params.owner)
+  url.searchParams.set('repo', params.repo)
+  url.searchParams.set('number', String(params.number))
+
+  const response = await fetch(url)
+  const body = (await readReviewThreadApiResponse(response)) as {
+    activity?: string | null
+    error?: string
+    state?: ReviewAgentSessionStatus['state']
+  }
+
+  if (!response.ok || !body.state) {
+    throw new ReviewThreadApiError(
+      body.error ??
+        `Reading the review agent status failed with HTTP ${response.status}.`,
+      response.status,
+    )
+  }
+
+  return { activity: body.activity ?? null, state: body.state }
+}
+
 export class ReviewThreadApiError extends Error {
   constructor(
     message: string,

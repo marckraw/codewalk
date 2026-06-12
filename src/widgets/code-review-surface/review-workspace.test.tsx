@@ -26,6 +26,9 @@ vi.mock('@/entities/review-thread', async () => {
     ...actual,
     addReviewThreadComment: vi.fn(),
     createReviewThread: vi.fn(),
+    fetchReviewAgentSessionStatus: vi.fn(() =>
+      Promise.resolve({ activity: 'tool:Read', state: 'running' as const }),
+    ),
     listReviewThreads: vi.fn(() => Promise.resolve([])),
     requestReviewThreadAgentReply: vi.fn(),
     updateReviewThreadStatus: vi.fn(),

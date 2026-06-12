@@ -2,6 +2,7 @@ import type { FormEvent } from 'react'
 import { Bot, CheckCircle2, MessageCircle, RotateCcw, Send } from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import { describeReviewAgentActivity } from './review-agent-activity.pure'
 import { ThreadExcerpt } from './thread-excerpt.presentational'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
 import { describeThreadAnchor } from './review-thread-annotation-anchor.pure'
@@ -68,7 +69,12 @@ export function PersistedReviewThreadAnnotation({
                 {comment.authorType === 'agent' ? 'Agent' : 'Reviewer'}
               </span>
               {comment.agentState ? (
-                <span className="font-normal">· {comment.agentState}</span>
+                <span className="font-normal">
+                  ·{' '}
+                  {comment.agentState === 'pending' && annotation.agentActivity
+                    ? describeReviewAgentActivity(annotation.agentActivity)
+                    : comment.agentState}
+                </span>
               ) : null}
             </div>
             <p className="whitespace-pre-wrap leading-5 text-[var(--foreground)]">

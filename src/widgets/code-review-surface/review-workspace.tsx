@@ -9,6 +9,8 @@ import {
   addReviewThreadComment,
   buildReviewThreadSelectionAnchor,
   createReviewThread,
+  extendReviewThreadSelection,
+  fetchReviewAgentSessionStatus,
   listReviewThreads,
   pierreSideFromReviewThreadDiffSide,
   requestReviewThreadAgentReply,
@@ -109,9 +111,12 @@ export function ReviewWorkspace({
   const [askingAgentThreadId, setAskingAgentThreadId] = useState<string | null>(
     null,
   )
+  const [agentActivity, setAgentActivity] = useState<string | null>(null)
   const [updatingStatusThreadId, setUpdatingStatusThreadId] = useState<
     string | null
   >(null)
+  const shiftPressedRef = useRef(false)
+  const selectionFileRef = useRef<string | null>(null)
 
   const statusCounts = useMemo(
     () => countFilesByStatus(workspace.files),
@@ -171,6 +176,95 @@ export function ReviewWorkspace({
         : [],
     [reviewThreads, selectedFile],
   )
+  const threadsByFile = useMemo(() => {
+    const map = new Map<string, ReviewThread[]>()
+
+    for (const thread of reviewThreads) {
+      const list = map.get(thread.filePath)
+      if (list) {
+        list.push(thread)
+      } else {
+        map.set(thread.filePath, [thread])
+      }
+    }
+
+    return map
+  }, [reviewThreads])
+
+  /**
+   * Single selection across both views: selecting lines in any file (diff
+   * pane or a guide file diff) makes that file the active one, and
+   * shift-click extends the previous range within the same file.
+   */
+  const handleFileSelectedLinesChange = useCallback(
+    (filePath: string, range: SelectedLineRange | null) => {
+      const sameFile = selectionFileRef.current === filePath
+      selectionFileRef.current = filePath
+      setSelectedFile(filePath)
+      setSelectedLines((previous) =>
+        extendReviewThreadSelection({
+          next: range,
+          previous: sameFile ? previous : null,
+          shiftKey: shiftPressedRef.current,
+        }),
+      )
+    },
+    [],
+  )
+
+  // Shift state for GitHub-style shift-click range extension in the gutter.
+  useEffect(() => {
+    function handleKey(event: KeyboardEvent) {
+      shiftPressedRef.current = event.shiftKey
+    }
+
+    window.addEventListener('keydown', handleKey)
+    window.addEventListener('keyup', handleKey)
+
+    return () => {
+      window.removeEventListener('keydown', handleKey)
+      window.removeEventListener('keyup', handleKey)
+    }
+  }, [])
+
+  // While an agent reply is pending, poll the session status so the thread
+  // shows what the agent is doing instead of a bare "pending".
+  useEffect(() => {
+    if (!askingAgentThreadId) {
+      setAgentActivity(null)
+      return
+    }
+
+    let cancelled = false
+
+    async function pollActivity() {
+      try {
+        const status = await fetchReviewAgentSessionStatus({
+          number: workspace.snapshot.number,
+          owner: workspace.snapshot.owner,
+          repo: workspace.snapshot.repo,
+        })
+        if (!cancelled) {
+          setAgentActivity(status.activity ?? status.state)
+        }
+      } catch {
+        // Activity is decorative; polling errors must not surface.
+      }
+    }
+
+    void pollActivity()
+    const interval = setInterval(() => void pollActivity(), 3_000)
+
+    return () => {
+      cancelled = true
+      clearInterval(interval)
+    }
+  }, [
+    askingAgentThreadId,
+    workspace.snapshot.number,
+    workspace.snapshot.owner,
+    workspace.snapshot.repo,
+  ])
 
   useEffect(() => {
     let cancelled = false
@@ -567,52 +661,77 @@ export function ReviewWorkspace({
     workspace.snapshot.repo,
   ])
 
-  const reviewThreadAnnotations = useMemo(
+  const draftAnnotation = useMemo(
     () =>
-      buildReviewThreadAnnotations({
-        draft:
-          selectedFile && selectedThreadAnchor.ok
-            ? {
-                anchor: selectedThreadAnchor.anchor,
-                body: draftBody,
-                error: draftError,
-                isSubmitting: isPostingDraft,
-                kind: 'draft',
-                onBodyChange: setDraftBody,
-                onCancel: clearSelectedReviewThreadDraft,
-                onSubmit: submitReviewThreadDraft,
-              }
-            : null,
-        askingAgentThreadId,
-        replyBodies,
-        replyingThreadId,
-        threadErrors,
-        threads: visibleThreads,
-        updatingStatusThreadId,
-        onAskAgent: askAgentInThread,
-        onReplyBodyChange: updateReplyBody,
-        onReplySubmit: submitReviewThreadReply,
-        onStatusChange: updateReviewThreadStatusFromAnnotation,
-      }),
+      selectedFile && selectedThreadAnchor.ok
+        ? ({
+            anchor: selectedThreadAnchor.anchor,
+            body: draftBody,
+            error: draftError,
+            isSubmitting: isPostingDraft,
+            kind: 'draft' as const,
+            onBodyChange: setDraftBody,
+            onCancel: clearSelectedReviewThreadDraft,
+            onSubmit: submitReviewThreadDraft,
+          } satisfies Extract<ReviewThreadAnnotationData, { kind: 'draft' }>)
+        : null,
     [
-      askAgentInThread,
-      askingAgentThreadId,
       clearSelectedReviewThreadDraft,
       draftBody,
       draftError,
       isPostingDraft,
-      replyBodies,
-      replyingThreadId,
       selectedFile,
       selectedThreadAnchor,
       submitReviewThreadDraft,
-      submitReviewThreadReply,
+    ],
+  )
+  const threadAnnotationHandlers = useMemo(
+    () => ({
+      agentActivity,
+      askingAgentThreadId,
+      replyBodies,
+      replyingThreadId,
+      threadErrors,
+      updatingStatusThreadId,
+      onAskAgent: askAgentInThread,
+      onReplyBodyChange: updateReplyBody,
+      onReplySubmit: submitReviewThreadReply,
+      onStatusChange: updateReviewThreadStatusFromAnnotation,
+    }),
+    [
+      agentActivity,
+      askAgentInThread,
+      askingAgentThreadId,
+      replyBodies,
+      replyingThreadId,
       threadErrors,
       updateReplyBody,
       updateReviewThreadStatusFromAnnotation,
+      submitReviewThreadReply,
       updatingStatusThreadId,
-      visibleThreads,
     ],
+  )
+  const reviewThreadAnnotations = useMemo(
+    () =>
+      buildReviewThreadAnnotations({
+        ...threadAnnotationHandlers,
+        draft: draftAnnotation,
+        threads: visibleThreads,
+      }),
+    [draftAnnotation, threadAnnotationHandlers, visibleThreads],
+  )
+  const getGuideFileAnnotations = useCallback(
+    (filePath: string) =>
+      buildReviewThreadAnnotations({
+        ...threadAnnotationHandlers,
+        draft: selectedFile === filePath ? draftAnnotation : null,
+        threads: threadsByFile.get(filePath) ?? [],
+      }),
+    [draftAnnotation, selectedFile, threadAnnotationHandlers, threadsByFile],
+  )
+  const getGuideFileSelectedLines = useCallback(
+    (filePath: string) => (selectedFile === filePath ? selectedLines : null),
+    [selectedFile, selectedLines],
   )
 
   const renderGuideSectionRef = useCallback(
@@ -713,10 +832,16 @@ export function ReviewWorkspace({
               <GuidePreparingPane />
             ) : workspace.guide ? (
               <GuideView
+                getFileAnnotations={getGuideFileAnnotations}
                 getFileDiff={(filePath) => diffByPath.get(filePath) ?? ''}
+                getFileSelectedLines={getGuideFileSelectedLines}
                 guide={workspace.guide}
                 isFileLoading={() => false}
+                onFileSelectedLinesChange={handleFileSelectedLinesChange}
                 onSelectFile={handleSelectGuideFile}
+                renderAnnotation={(annotation) => (
+                  <ReviewThreadAnnotation annotation={annotation.metadata} />
+                )}
                 renderFileRef={renderGuideFileRef}
                 renderSectionRef={renderGuideSectionRef}
               />
@@ -746,7 +871,12 @@ export function ReviewWorkspace({
                 file={selectedFile}
                 fileStatus={selectedFileStatus}
                 lineAnnotations={reviewThreadAnnotations}
-                onSelectedLinesChange={setSelectedLines}
+                onSelectedLinesChange={
+                  selectedFile
+                    ? (range) =>
+                        handleFileSelectedLinesChange(selectedFile, range)
+                    : undefined
+                }
                 renderAnnotation={(annotation) => (
                   <ReviewThreadAnnotation annotation={annotation.metadata} />
                 )}
@@ -772,6 +902,7 @@ function countFilesByStatus(files: ReviewFile[]): Record<string, number> {
 }
 
 function buildReviewThreadAnnotations(input: {
+  agentActivity: string | null
   askingAgentThreadId: string | null
   draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
   onAskAgent: (threadId: string) => void
@@ -788,6 +919,8 @@ function buildReviewThreadAnnotations(input: {
     input.threads.map((thread) => ({
       lineNumber: thread.lineStart,
       metadata: {
+        agentActivity:
+          input.askingAgentThreadId === thread.id ? input.agentActivity : null,
         error: input.threadErrors[thread.id] || null,
         isAskingAgent: input.askingAgentThreadId === thread.id,
         isReplying: input.replyingThreadId === thread.id,

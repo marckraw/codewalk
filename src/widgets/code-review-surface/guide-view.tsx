@@ -1,24 +1,41 @@
 import type { ReactNode } from 'react'
+import type { DiffLineAnnotation, SelectedLineRange } from '@pierre/diffs'
 import { Button } from '@/shared/ui/button'
 import { MarkdownText } from './markdown'
 import { GuideFileDiff } from './guide-file-diff'
 import { RiskBadge } from './risk-badge'
 import type { ReviewGuide, ReviewGuideSection } from './review-types'
+import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
 
 interface GuideViewProps {
+  getFileAnnotations?: (
+    filePath: string,
+  ) => DiffLineAnnotation<ReviewThreadAnnotationData>[]
   getFileDiff: (filePath: string) => string
+  getFileSelectedLines?: (filePath: string) => SelectedLineRange | null
   guide: ReviewGuide
   isFileLoading: (filePath: string) => boolean
+  onFileSelectedLinesChange?: (
+    filePath: string,
+    range: SelectedLineRange | null,
+  ) => void
   onSelectFile: (filePath: string) => void
+  renderAnnotation?: (
+    annotation: DiffLineAnnotation<ReviewThreadAnnotationData>,
+  ) => ReactNode
   renderFileRef: (filePath: string) => (node: HTMLElement | null) => void
   renderSectionRef: (sectionId: string) => (node: HTMLElement | null) => void
 }
 
 export function GuideView({
+  getFileAnnotations,
   getFileDiff,
+  getFileSelectedLines,
   guide,
   isFileLoading,
+  onFileSelectedLinesChange,
   onSelectFile,
+  renderAnnotation,
   renderFileRef,
   renderSectionRef,
 }: GuideViewProps) {
@@ -86,8 +103,16 @@ export function GuideView({
                   key={file.path}
                   diff={getFileDiff(file.path)}
                   file={file}
+                  lineAnnotations={getFileAnnotations?.(file.path)}
                   loading={isFileLoading(file.path)}
+                  onSelectedLinesChange={
+                    onFileSelectedLinesChange
+                      ? (range) => onFileSelectedLinesChange(file.path, range)
+                      : undefined
+                  }
+                  renderAnnotation={renderAnnotation}
                   renderRef={renderFileRef(file.path)}
+                  selectedLines={getFileSelectedLines?.(file.path)}
                 />
               ))}
             </div>
