@@ -18,5 +18,9 @@ export {
   type AgentsDaemonProviderModel,
   type AgentsDaemonGuideJob,
   type AgentsDaemonGuideJobStatus,
+  type AgentsDaemonExecutionSessionSnapshot,
+  type AgentsDaemonExecutionSessionStatus,
+  type AgentsDaemonExecutionStartInput,
+  type AgentsDaemonExecutionStartResult,
   resolveAgentsDaemonBaseUrl,
 } from './protocol'

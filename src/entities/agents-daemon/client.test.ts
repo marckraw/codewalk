@@ -99,6 +99,60 @@ describe('AgentsDaemonClient', () => {
     )
   })
 
+  it('starts execution sessions and reads execution snapshots', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({ protocolVersion: 1, sessionId: 'session-1' }, 201),
+      )
+      .mockResolvedValueOnce(jsonResponse(executionSnapshot))
+    const client = new AgentsDaemonClient({
+      apiToken: 'secret-token',
+      baseUrl: 'https://daemon.example.com',
+      fetch,
+    })
+
+    await expect(
+      client.startExecutionSession({
+        initialMessage: 'Ready?',
+        model: 'gpt-5.5',
+        providerId: 'codex',
+        sessionId: 'session-1',
+        workspace: {
+          ref: 'head-sha',
+          repository: 'https://github.com/ef-global/example',
+        },
+      }),
+    ).resolves.toEqual({ protocolVersion: 1, sessionId: 'session-1' })
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'https://daemon.example.com/v0/execution/sessions',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
+      config: {
+        initialMessage: 'Ready?',
+        sessionId: 'session-1',
+      },
+      protocolVersion: 1,
+      providerId: 'codex',
+      workspace: {
+        ref: 'head-sha',
+        repository: 'https://github.com/ef-global/example',
+      },
+    })
+
+    await expect(client.getExecutionSession('session-1')).resolves.toEqual(
+      executionSnapshot,
+    )
+    expect(fetch).toHaveBeenNthCalledWith(
+      2,
+      'https://daemon.example.com/v0/execution/sessions/session-1',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
   it('posts guide generation requests to the daemon', async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse(generatePayload))
     const client = new AgentsDaemonClient({
@@ -273,6 +327,25 @@ const metaPayload = {
     uptimeSeconds: 12,
   },
   version: '1.0.0',
+}
+
+const executionSnapshot = {
+  activity: null,
+  attention: 'none',
+  contextWindow: null,
+  continuationToken: 'thread-1',
+  conversation: [],
+  lastSeq: 4,
+  prUrl: null,
+  protocolVersion: 1,
+  providerId: 'codex',
+  sessionId: 'session-1',
+  status: 'running' as const,
+  workspace: {
+    baseRef: 'head-sha',
+    branchName: 'agent/session-1',
+    repository: 'https://github.com/ef-global/example',
+  },
 }
 
 const pullRequest = {
