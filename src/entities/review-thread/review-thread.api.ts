@@ -111,6 +111,34 @@ export async function updateReviewThreadStatus(input: {
   return body.thread
 }
 
+/**
+ * Asks the per-PR review agent to answer the latest reviewer question in the
+ * thread. Resolves with the updated thread once the agent turn completes —
+ * the agent comment goes through pending server-side (streaming is P8).
+ */
+export async function requestReviewThreadAgentReply(
+  threadId: string,
+): Promise<ReviewThread> {
+  const response = await fetch(
+    `/api/review-threads/${encodeURIComponent(threadId)}/agent-reply`,
+    { method: 'POST' },
+  )
+  const body = (await readReviewThreadApiResponse(response)) as {
+    error?: string
+    thread?: ReviewThread
+  }
+
+  if (!response.ok || !body.thread) {
+    throw new ReviewThreadApiError(
+      body.error ??
+        `Asking the review agent failed with HTTP ${response.status}.`,
+      response.status,
+    )
+  }
+
+  return body.thread
+}
+
 export class ReviewThreadApiError extends Error {
   constructor(
     message: string,

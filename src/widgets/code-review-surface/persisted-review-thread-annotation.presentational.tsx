@@ -91,9 +91,27 @@ export function PersistedReviewThreadAnnotation({
         {annotation.error ? (
           <p className="text-[var(--danger)]">{annotation.error}</p>
         ) : null}
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2">
           <Button
-            disabled={annotation.isReplying || !annotation.replyBody.trim()}
+            disabled={
+              annotation.isAskingAgent ||
+              annotation.isReplying ||
+              !annotation.replyBody.trim()
+            }
+            onClick={annotation.onAskAgent}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <Bot aria-hidden="true" className="size-3.5" />
+            {annotation.isAskingAgent ? 'Asking agent' : 'Ask agent'}
+          </Button>
+          <Button
+            disabled={
+              annotation.isAskingAgent ||
+              annotation.isReplying ||
+              !annotation.replyBody.trim()
+            }
             size="sm"
             type="submit"
             variant="primary"

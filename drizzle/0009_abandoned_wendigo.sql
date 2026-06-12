@@ -1,0 +1,1 @@
+ALTER TABLE "review_thread_comments" ADD COLUMN "agent_seq_start" integer;

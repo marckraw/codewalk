@@ -11,6 +11,7 @@ import {
 import {
   getPullRequestSnapshotById,
   getReviewAgentSessionForPullRequest,
+  getReviewWorkspace,
   startReviewAgentSession,
   updateReviewAgentSessionFromSnapshot,
   type PullRequestSnapshotRow,
@@ -20,6 +21,7 @@ import { buildRepositoryUrlFromSnapshot } from '@/features/code-review-guide-gen
 import {
   buildPullRequestReviewAgentInitialPrompt,
   buildPullRequestReviewAgentSessionId,
+  type ReviewAgentGuideContext,
 } from './pr-review-agent-session.pure'
 
 export type EnsurePullRequestReviewAgentSessionInput = {
@@ -155,7 +157,10 @@ async function startRemoteReviewAgentSession(input: {
     const started = await input.client.startExecutionSession({
       continuationToken: input.continuationToken,
       effort: input.config.config.defaultEffort,
-      initialMessage: buildPullRequestReviewAgentInitialPrompt(input.snapshot),
+      initialMessage: buildPullRequestReviewAgentInitialPrompt(
+        input.snapshot,
+        await loadGuideContextForBootPrompt(input.snapshot.id),
+      ),
       model: input.config.config.defaultModel,
       providerId: input.config.config.defaultProvider,
       sessionId: daemonSessionId,
@@ -208,6 +213,34 @@ async function updateStoredReviewAgentSessionFromDaemonSnapshot(input: {
     status: input.daemonSnapshot.status,
     workspace: input.daemonSnapshot.workspace,
   })
+}
+
+/**
+ * Best effort: the boot prompt is richer with the generated guide, but a PR
+ * without a ready guide (or a workspace read failure) must not block the
+ * agent session.
+ */
+async function loadGuideContextForBootPrompt(
+  snapshotId: string,
+): Promise<ReviewAgentGuideContext | null> {
+  try {
+    const workspace = await getReviewWorkspace(snapshotId)
+    const guide = workspace?.guide
+
+    if (!guide || guide.status !== 'ready') {
+      return null
+    }
+
+    return {
+      overview: guide.overview,
+      sections: guide.sections.map((section) => ({
+        summary: section.summary,
+        title: section.title,
+      })),
+    }
+  } catch {
+    return null
+  }
 }
 
 function isMissingExecutionSessionError(error: unknown) {

@@ -153,6 +153,35 @@ describe('AgentsDaemonClient', () => {
     )
   })
 
+  it('sends execution session messages as command envelopes', async () => {
+    const fetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ accepted: true }, 202))
+    const client = new AgentsDaemonClient({
+      apiToken: 'secret-token',
+      baseUrl: 'https://daemon.example.com',
+      fetch,
+    })
+
+    await expect(
+      client.sendExecutionSessionMessage({
+        sessionId: 'session-1',
+        text: 'What does this range do?',
+      }),
+    ).resolves.toEqual({ accepted: true })
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'https://daemon.example.com/v0/execution/sessions/session-1/commands',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      command: { kind: 'send-message', text: 'What does this range do?' },
+      protocolVersion: 1,
+      sessionId: 'session-1',
+    })
+  })
+
   it('posts guide generation requests to the daemon', async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse(generatePayload))
     const client = new AgentsDaemonClient({

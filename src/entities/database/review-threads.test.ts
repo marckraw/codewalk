@@ -71,6 +71,7 @@ describe('buildReviewThreadCommentRow', () => {
       authorUserId: 'user-1',
       body: 'why does this work?',
       agentState: null,
+      agentSeqStart: null,
     })
   })
 
@@ -82,7 +83,12 @@ describe('buildReviewThreadCommentRow', () => {
         authorUserId: null,
         body: '',
         agentState: 'pending',
+        agentSeqStart: 17,
       }),
-    ).toMatchObject({ authorType: 'agent', agentState: 'pending' })
+    ).toMatchObject({
+      authorType: 'agent',
+      agentState: 'pending',
+      agentSeqStart: 17,
+    })
   })
 })
