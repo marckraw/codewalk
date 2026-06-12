@@ -180,6 +180,7 @@ describe('agents-daemon protocol', () => {
   it('builds execution start bodies and parses execution snapshots', () => {
     expect(
       buildAgentsDaemonExecutionStartRequestBody({
+        automationMode: true,
         continuationToken: ' thread-1 ',
         effort: ' high ',
         initialMessage: ' Ready? ',
@@ -193,6 +194,7 @@ describe('agents-daemon protocol', () => {
       }),
     ).toEqual({
       config: {
+        automationMode: true,
         continuationToken: 'thread-1',
         effort: 'high',
         initialMessage: 'Ready?',

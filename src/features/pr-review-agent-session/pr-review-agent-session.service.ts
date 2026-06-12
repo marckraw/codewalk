@@ -174,6 +174,8 @@ async function startRemoteReviewAgentSession(input: {
 
   try {
     const started = await input.client.startExecutionSession({
+      // No approver UI exists in Codewalk; turns must never wait on approvals.
+      automationMode: true,
       continuationToken: input.continuationToken,
       effort: input.config.config.defaultEffort,
       initialMessage: buildPullRequestReviewAgentInitialPrompt(

@@ -156,6 +156,12 @@ export type AgentsDaemonExecutionSessionStatus =
   | 'failed'
 
 export type AgentsDaemonExecutionStartInput = {
+  /**
+   * Codewalk has no approver UI: providers must run in their non-interactive
+   * mode (codex approvalPolicy "never") so a turn can never hang on an
+   * approval request.
+   */
+  automationMode?: boolean
   continuationToken?: string | null
   effort?: string | null
   initialMessage: string
@@ -173,6 +179,7 @@ export type AgentsDaemonExecutionStartRequestBody = {
   protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
   providerId: string
   config: {
+    automationMode?: boolean
     continuationToken: string | null
     effort: string | null
     initialMessage: string
@@ -363,6 +370,9 @@ export function buildAgentsDaemonExecutionStartRequestBody(
 
   return {
     config: {
+      ...(input.automationMode === undefined
+        ? {}
+        : { automationMode: input.automationMode }),
       continuationToken: input.continuationToken?.trim() || null,
       effort: input.effort?.trim() || null,
       initialMessage,
