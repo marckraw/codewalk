@@ -274,6 +274,19 @@ describe('ReviewWorkspace', () => {
     expect(screen.getByText('What guarantees this path?')).toBeInTheDocument()
   })
 
+  it('renders an outdated badge on outdated threads', async () => {
+    const user = userEvent.setup()
+    mockedListReviewThreads.mockResolvedValue([
+      { ...makeReviewThread(), status: 'outdated' },
+    ])
+
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    await user.click(screen.getByRole('button', { name: /Diff/ }))
+
+    expect(await screen.findByText('Outdated')).toBeInTheDocument()
+  })
+
   it('asks the agent automatically after creating a thread', async () => {
     const user = userEvent.setup()
     mockedCreateReviewThread.mockResolvedValue(

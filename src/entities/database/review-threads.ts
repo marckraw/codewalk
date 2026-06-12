@@ -214,9 +214,30 @@ export async function claimReviewThreadAgentTurn(input: {
   return comment ?? null
 }
 
+/** Open thread rows for a PR, without their comments — for bulk passes. */
+export async function listOpenReviewThreadRowsForPullRequest(input: {
+  owner: string
+  repo: string
+  pullRequestNumber: number
+}): Promise<ReviewThreadRow[]> {
+  const db = getDb()
+
+  return db
+    .select()
+    .from(reviewThreads)
+    .where(
+      and(
+        eq(reviewThreads.owner, input.owner.toLowerCase()),
+        eq(reviewThreads.repo, input.repo.toLowerCase()),
+        eq(reviewThreads.pullRequestNumber, input.pullRequestNumber),
+        eq(reviewThreads.status, 'open'),
+      ),
+    )
+}
+
 export async function setReviewThreadStatus(
   threadId: string,
-  status: 'open' | 'resolved',
+  status: 'open' | 'resolved' | 'outdated',
 ): Promise<ReviewThreadRow | null> {
   const db = getDb()
   const [thread] = await db

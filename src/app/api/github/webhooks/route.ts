@@ -3,6 +3,7 @@ import {
   CodeReviewGuideGenerationError,
   startCodeReviewGuideGenerationRun,
 } from '@/features/code-review-guide-generation'
+import { markOutdatedReviewThreadsForSnapshot } from '@/features/review-thread-outdated'
 import {
   listRepositoryReviewRules,
   persistPullRequestSnapshot,
@@ -141,6 +142,22 @@ export async function POST(request: Request) {
       repo: persistedSnapshot.repo,
       snapshotId: persistedSnapshot.id,
     })
+
+    try {
+      const outdated = await markOutdatedReviewThreadsForSnapshot({
+        snapshotId: persistedSnapshot.id,
+      })
+      if (outdated.outdatedThreadIds.length > 0) {
+        logCodewalkEvent('codewalk.github_webhook.threads_outdated', {
+          count: outdated.outdatedThreadIds.length,
+          owner: persistedSnapshot.owner,
+          pullRequestNumber: persistedSnapshot.number,
+          repo: persistedSnapshot.repo,
+        })
+      }
+    } catch {
+      // Outdated marking is best effort; the webhook import succeeded.
+    }
 
     if (!shouldGenerateGuideForPullRequestWebhookAction(resolved.action)) {
       return NextResponse.json(
