@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildAgentsDaemonGenerateGuideRequestBody,
+  buildAgentsDaemonExecutionStartRequestBody,
   buildAgentsDaemonSubmitGuideJobRequestBody,
   buildAgentsDaemonUrl,
+  parseAgentsDaemonExecutionSessionSnapshot,
+  parseAgentsDaemonExecutionStartResult,
   parseAgentsDaemonGenerateGuideResult,
   parseAgentsDaemonGuideJob,
   parseAgentsDaemonGuideJobSubmitResult,
@@ -171,6 +174,49 @@ describe('agents-daemon protocol', () => {
     ).toThrow('callbacks require')
   })
 
+  it('builds execution start bodies and parses execution snapshots', () => {
+    expect(
+      buildAgentsDaemonExecutionStartRequestBody({
+        continuationToken: ' thread-1 ',
+        effort: ' high ',
+        initialMessage: ' Ready? ',
+        model: ' gpt-5.5 ',
+        providerId: ' codex ',
+        sessionId: ' session-1 ',
+        workspace: {
+          ref: 'head-sha',
+          repository: 'https://github.com/ef-global/example',
+        },
+      }),
+    ).toEqual({
+      config: {
+        continuationToken: 'thread-1',
+        effort: 'high',
+        initialMessage: 'Ready?',
+        model: 'gpt-5.5',
+        sessionId: 'session-1',
+        workingDirectory: '/tmp',
+      },
+      protocolVersion: 1,
+      providerId: 'codex',
+      workspace: {
+        ref: 'head-sha',
+        repository: 'https://github.com/ef-global/example',
+      },
+    })
+
+    expect(
+      parseAgentsDaemonExecutionStartResult({
+        protocolVersion: 1,
+        sessionId: 'session-1',
+      }),
+    ).toEqual({ protocolVersion: 1, sessionId: 'session-1' })
+
+    expect(
+      parseAgentsDaemonExecutionSessionSnapshot(executionSnapshot),
+    ).toEqual(executionSnapshot)
+  })
+
   it('parses job submissions and job records', () => {
     expect(
       parseAgentsDaemonGuideJobSubmitResult({
@@ -271,6 +317,25 @@ const metaPayload = {
     uptimeSeconds: 12,
   },
   version: '1.0.0',
+}
+
+const executionSnapshot = {
+  activity: null,
+  attention: 'none',
+  contextWindow: null,
+  continuationToken: 'thread-1',
+  conversation: [],
+  lastSeq: 4,
+  prUrl: null,
+  protocolVersion: 1,
+  providerId: 'codex',
+  sessionId: 'session-1',
+  status: 'running' as const,
+  workspace: {
+    baseRef: 'head-sha',
+    branchName: 'agent/session-1',
+    repository: 'https://github.com/ef-global/example',
+  },
 }
 
 const pullRequest = {

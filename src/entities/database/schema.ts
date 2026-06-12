@@ -522,6 +522,13 @@ export const reviewThreadAgentState = pgEnum('review_thread_agent_state', [
   'error',
 ])
 
+export const reviewAgentSessionStatus = pgEnum('review_agent_session_status', [
+  'idle',
+  'running',
+  'completed',
+  'failed',
+])
+
 /**
  * Anchored conversation threads on a guided review. Threads belong to the
  * pull request identity (owner/repo/number), not to a snapshot: new pushes
@@ -593,6 +600,49 @@ export const reviewThreadComments = pgTable(
   }),
 )
 
+export const reviewAgentSessions = pgTable(
+  'review_agent_sessions',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    owner: varchar('owner', { length: 191 }).notNull(),
+    repo: varchar('repo', { length: 191 }).notNull(),
+    pullRequestNumber: integer('pull_request_number').notNull(),
+    snapshotId: uuid('snapshot_id').references(() => pullRequestSnapshots.id, {
+      onDelete: 'set null',
+    }),
+    daemonSessionId: varchar('daemon_session_id', { length: 191 }).notNull(),
+    provider: codeReviewGuideProvider('provider').notNull(),
+    model: text('model').notNull(),
+    effort: text('effort'),
+    status: reviewAgentSessionStatus('status').default('idle').notNull(),
+    continuationToken: text('continuation_token'),
+    lastSeq: integer('last_seq').default(0).notNull(),
+    workspaceRepository: text('workspace_repository'),
+    workspaceBranchName: text('workspace_branch_name'),
+    workspaceBaseRef: text('workspace_base_ref'),
+    prUrl: text('pr_url'),
+    createdByUserId: uuid('created_by_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    daemonSessionIdx: uniqueIndex(
+      'review_agent_sessions_daemon_session_idx',
+    ).on(table.daemonSessionId),
+    pullRequestIdx: uniqueIndex('review_agent_sessions_pull_request_idx').on(
+      table.owner,
+      table.repo,
+      table.pullRequestNumber,
+    ),
+  }),
+)
+
 export type ReviewThreadStatus = 'open' | 'resolved' | 'outdated'
 export type ReviewThreadDiffSide = 'old' | 'new'
 export type ReviewThreadCommentAuthorType = 'user' | 'agent'
@@ -603,3 +653,9 @@ export type ReviewThreadAgentState =
   | 'error'
 export type ReviewThreadRow = typeof reviewThreads.$inferSelect
 export type ReviewThreadCommentRow = typeof reviewThreadComments.$inferSelect
+export type ReviewAgentSessionStatus =
+  | 'idle'
+  | 'running'
+  | 'completed'
+  | 'failed'
+export type ReviewAgentSessionRow = typeof reviewAgentSessions.$inferSelect
