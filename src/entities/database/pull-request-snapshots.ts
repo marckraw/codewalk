@@ -170,6 +170,22 @@ export async function persistPullRequestSnapshot(
   })
 }
 
+/** Path -> diff patch for every changed file recorded on a snapshot. */
+export async function listPullRequestFilePatches(
+  snapshotId: string,
+): Promise<Map<string, string | null>> {
+  const db = getDb()
+  const files = await db
+    .select({
+      patch: pullRequestFiles.patch,
+      path: pullRequestFiles.path,
+    })
+    .from(pullRequestFiles)
+    .where(eq(pullRequestFiles.snapshotId, snapshotId))
+
+  return new Map(files.map((file) => [file.path, file.patch]))
+}
+
 export async function getPullRequestSnapshotById(
   snapshotId: string,
 ): Promise<PullRequestSnapshotRow | null> {

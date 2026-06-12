@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentsDaemonClientError } from '@/entities/agents-daemon'
 import {
+  getLatestPullRequestSnapshotByRef,
   getPullRequestSnapshotById,
   getReviewAgentSessionForPullRequest,
   startReviewAgentSession,
@@ -22,6 +23,7 @@ vi.mock('@/entities/database', async () => {
 
   return {
     ...actual,
+    getLatestPullRequestSnapshotByRef: vi.fn(),
     getPullRequestSnapshotById: vi.fn(),
     getReviewAgentSessionForPullRequest: vi.fn(),
     startReviewAgentSession: vi.fn(),
@@ -30,6 +32,9 @@ vi.mock('@/entities/database', async () => {
 })
 
 const mockedGetPullRequestSnapshotById = vi.mocked(getPullRequestSnapshotById)
+const mockedGetLatestSnapshotByRef = vi.mocked(
+  getLatestPullRequestSnapshotByRef,
+)
 const mockedGetReviewAgentSessionForPullRequest = vi.mocked(
   getReviewAgentSessionForPullRequest,
 )
@@ -50,6 +55,7 @@ describe('ensurePullRequestReviewAgentSession', () => {
       DEFAULT_GUIDE_PROVIDER: 'codex',
     }
     mockedGetPullRequestSnapshotById.mockResolvedValue(snapshot)
+    mockedGetLatestSnapshotByRef.mockResolvedValue(snapshot)
     mockedGetReviewAgentSessionForPullRequest.mockResolvedValue(null)
     mockedStartReviewAgentSession.mockResolvedValue(storedSession)
     mockedUpdateReviewAgentSessionFromSnapshot.mockResolvedValue(updatedSession)
@@ -169,6 +175,42 @@ describe('ensurePullRequestReviewAgentSession', () => {
     )
   })
 
+  it('recreates the session at the latest head when the PR moved', async () => {
+    mockedGetReviewAgentSessionForPullRequest.mockResolvedValue({
+      ...storedSession,
+      continuationToken: 'thread-old',
+    })
+    mockedGetLatestSnapshotByRef.mockResolvedValue({
+      ...snapshot,
+      headSha: 'head-sha-2',
+      id: 'snapshot-2',
+    } as PullRequestSnapshotRow)
+    const client = {
+      getExecutionSession: vi.fn().mockResolvedValue(daemonSnapshot),
+      startExecutionSession: vi
+        .fn()
+        .mockResolvedValue({ protocolVersion: 1, sessionId: 'daemon-2' }),
+    }
+
+    await expect(
+      ensurePullRequestReviewAgentSession({
+        client,
+        requestedByUserId: 'user-1',
+        snapshotId: 'snapshot-1',
+      }),
+    ).resolves.toMatchObject({ action: 'recreated' })
+
+    expect(client.startExecutionSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        continuationToken: 'thread-old',
+        workspace: expect.objectContaining({ ref: 'head-sha-2' }),
+      }),
+    )
+    expect(mockedStartReviewAgentSession).toHaveBeenCalledWith(
+      expect.objectContaining({ snapshotId: 'snapshot-2' }),
+    )
+  })
+
   it('reports the live session activity without creating sessions', async () => {
     mockedGetReviewAgentSessionForPullRequest.mockResolvedValue(storedSession)
     const client = {
@@ -238,6 +280,7 @@ const storedSession = {
   owner: 'ef-global',
   pullRequestNumber: 42,
   repo: 'backpack',
+  snapshotId: 'snapshot-1',
 } as ReviewAgentSessionRow
 
 const updatedSession = {

@@ -35,6 +35,11 @@ export function PersistedReviewThreadAnnotation({
               Resolved
             </Badge>
           ) : null}
+          {thread.status === 'outdated' ? (
+            <Badge className="h-5 px-1.5" tone="warning">
+              Outdated
+            </Badge>
+          ) : null}
         </div>
         <Button
           disabled={annotation.isUpdatingStatus}

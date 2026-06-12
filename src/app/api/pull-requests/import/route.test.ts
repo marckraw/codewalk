@@ -5,6 +5,12 @@ import { POST } from './route'
 
 vi.mock('server-only', () => ({}))
 
+vi.mock('@/features/review-thread-outdated', () => ({
+  markOutdatedReviewThreadsForSnapshot: vi.fn(() =>
+    Promise.resolve({ outdatedThreadIds: [] }),
+  ),
+}))
+
 vi.mock('@/entities/auth-server', () => ({
   getCurrentCodewalkUser: vi.fn(),
 }))

@@ -4,6 +4,12 @@ import { POST } from './route'
 
 vi.mock('server-only', () => ({}))
 
+vi.mock('@/features/review-thread-outdated', () => ({
+  markOutdatedReviewThreadsForSnapshot: vi.fn(() =>
+    Promise.resolve({ outdatedThreadIds: [] }),
+  ),
+}))
+
 const afterTasks = vi.hoisted(() => [] as Array<() => unknown>)
 
 vi.mock('next/server', async (importOriginal) => {

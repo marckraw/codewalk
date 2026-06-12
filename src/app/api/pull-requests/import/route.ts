@@ -14,6 +14,7 @@ import {
   getGitHubAutomationConfig,
   GitHubClientError,
 } from '@/entities/github-server'
+import { markOutdatedReviewThreadsForSnapshot } from '@/features/review-thread-outdated'
 
 export async function POST(request: Request) {
   let body: unknown
@@ -97,6 +98,14 @@ export async function POST(request: Request) {
       importedByUserId: user.id,
       snapshot,
     })
+
+    try {
+      await markOutdatedReviewThreadsForSnapshot({
+        snapshotId: persistedSnapshot.id,
+      })
+    } catch {
+      // Outdated marking is best effort; the import itself succeeded.
+    }
 
     return NextResponse.json({
       counts: {

@@ -9,6 +9,7 @@ import {
   type AgentsDaemonExecutionSessionSnapshot,
 } from '@/entities/agents-daemon'
 import {
+  getLatestPullRequestSnapshotByRef,
   getPullRequestSnapshotById,
   getReviewAgentSessionForPullRequest,
   getReviewWorkspace,
@@ -60,15 +61,25 @@ export class PullRequestReviewAgentSessionError extends Error {
 export async function ensurePullRequestReviewAgentSession(
   input: EnsurePullRequestReviewAgentSessionInput,
 ): Promise<EnsurePullRequestReviewAgentSessionResult> {
-  const snapshot = await getPullRequestSnapshotById(input.snapshotId)
+  const requested = await getPullRequestSnapshotById(input.snapshotId)
 
-  if (!snapshot) {
+  if (!requested) {
     throw new PullRequestReviewAgentSessionError(
       'not-found',
       'Pull request snapshot was not found.',
       404,
     )
   }
+
+  // The session always follows the LATEST known head of the PR, even when
+  // asked from a thread anchored to an older snapshot — the agent must answer
+  // about the code that is actually on the branch now.
+  const snapshot =
+    (await getLatestPullRequestSnapshotByRef({
+      number: requested.number,
+      owner: requested.owner,
+      repo: requested.repo,
+    })) ?? requested
 
   const config = getAgentsDaemonConfig()
 
@@ -87,7 +98,15 @@ export async function ensurePullRequestReviewAgentSession(
     repo: snapshot.repo,
   })
 
-  if (existing) {
+  // A session pinned to an older snapshot has a checkout of an older head:
+  // skip reuse and recreate at the new ref with the continuation token, so
+  // the provider keeps its conversation context but sees the new code.
+  const headMoved =
+    existing !== null &&
+    existing.snapshotId !== null &&
+    existing.snapshotId !== snapshot.id
+
+  if (existing && !headMoved) {
     const reused = await tryReuseExistingReviewAgentSession(existing, client)
 
     if (reused) {
