@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildPullRequestReviewAgentInitialPrompt,
   buildPullRequestReviewAgentSessionId,
-  buildReviewAgentTurnQueueKey,
   buildReviewThreadAgentQuestionPrompt,
-  extractAgentReplyText,
+  extractAgentReplyAfterLastUserMessage,
 } from './pr-review-agent-session.pure'
 
 describe('PR review agent session helpers', () => {
@@ -75,7 +74,7 @@ describe('PR review agent session helpers', () => {
     expect(prompt).toContain('Question: Why is this safe?')
   })
 
-  it('extracts assistant messages appended after the baseline', () => {
+  it('extracts assistant messages after the last user message', () => {
     const conversation = [
       {
         actor: 'user',
@@ -121,19 +120,12 @@ describe('PR review agent session helpers', () => {
       },
     ]
 
-    expect(extractAgentReplyText(conversation, 2)).toBe(
+    expect(extractAgentReplyAfterLastUserMessage(conversation)).toBe(
       'It validates the token.\n\nSee src/auth.ts:12.',
     )
-    expect(extractAgentReplyText(conversation, 6)).toBeNull()
-  })
-
-  it('builds case-insensitive per-PR queue keys', () => {
     expect(
-      buildReviewAgentTurnQueueKey({
-        owner: 'EF-Global',
-        pullRequestNumber: 42,
-        repo: 'Backpack',
-      }),
-    ).toBe('ef-global/backpack#42')
+      extractAgentReplyAfterLastUserMessage(conversation.slice(0, 3)),
+    ).toBeNull()
+    expect(extractAgentReplyAfterLastUserMessage([])).toBeNull()
   })
 })

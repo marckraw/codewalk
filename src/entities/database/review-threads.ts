@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { asc, and, desc, eq } from 'drizzle-orm'
+import { asc, and, desc, eq, isNull } from 'drizzle-orm'
 import type {
   ReviewThreadAgentState,
   ReviewThreadCommentAuthorType,
@@ -187,6 +187,31 @@ export async function updateReviewThreadComment(
   }
 
   return comment
+}
+
+/**
+ * Optimistic claim of a pending agent comment before sending its question to
+ * the daemon: the seq is only written when no other process claimed it first
+ * (agent_seq_start still null). Returns null when the claim was lost.
+ */
+export async function claimReviewThreadAgentTurn(input: {
+  agentSeqStart: number
+  commentId: string
+}): Promise<ReviewThreadCommentRow | null> {
+  const db = getDb()
+  const [comment] = await db
+    .update(reviewThreadComments)
+    .set({ agentSeqStart: input.agentSeqStart })
+    .where(
+      and(
+        eq(reviewThreadComments.id, input.commentId),
+        eq(reviewThreadComments.agentState, 'pending'),
+        isNull(reviewThreadComments.agentSeqStart),
+      ),
+    )
+    .returning()
+
+  return comment ?? null
 }
 
 export async function setReviewThreadStatus(

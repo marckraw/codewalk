@@ -13,6 +13,7 @@ import {
   fetchReviewAgentSessionStatus,
   listReviewThreads,
   pierreSideFromReviewThreadDiffSide,
+  pollReviewThreadAgentReply,
   requestReviewThreadAgentReply,
   updateReviewThreadStatus,
   type ReviewThread,
@@ -108,9 +109,6 @@ export function ReviewWorkspace({
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({})
   const [threadErrors, setThreadErrors] = useState<Record<string, string>>({})
   const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null)
-  const [askingAgentThreadId, setAskingAgentThreadId] = useState<string | null>(
-    null,
-  )
   const [agentActivity, setAgentActivity] = useState<string | null>(null)
   const [updatingStatusThreadId, setUpdatingStatusThreadId] = useState<
     string | null
@@ -227,17 +225,51 @@ export function ReviewWorkspace({
     }
   }, [])
 
-  // While an agent reply is pending, poll the session status so the thread
-  // shows what the agent is doing instead of a bare "pending".
+  // Threads whose latest agent comment is still pending. Derived from data so
+  // a page refresh (or another viewer's question) resumes polling naturally.
+  const pendingAgentThreadIds = useMemo(
+    () =>
+      reviewThreads
+        .filter((thread) =>
+          thread.comments.some(
+            (comment) =>
+              comment.authorType === 'agent' &&
+              comment.agentState === 'pending',
+          ),
+        )
+        .map((thread) => thread.id),
+    [reviewThreads],
+  )
+  const pendingAgentThreadsKey = pendingAgentThreadIds.join(',')
+
+  // Drive pending turns to completion: each tick advances the server-side
+  // state machine (send when idle, complete when the turn ended) and merges
+  // the updated thread. The turn itself never lives inside one request, so
+  // serverless time limits cannot orphan it.
   useEffect(() => {
-    if (!askingAgentThreadId) {
+    if (!pendingAgentThreadsKey) {
       setAgentActivity(null)
       return
     }
 
     let cancelled = false
 
-    async function pollActivity() {
+    async function pollPendingThreads() {
+      for (const threadId of pendingAgentThreadsKey.split(',')) {
+        try {
+          const updated = await pollReviewThreadAgentReply(threadId)
+          if (cancelled) return
+          setReviewThreads((current) =>
+            current.map((thread) =>
+              thread.id === updated.id ? updated : thread,
+            ),
+          )
+        } catch {
+          // Transient polling errors are retried on the next tick; terminal
+          // failures land on the comment row server-side.
+        }
+      }
+
       try {
         const status = await fetchReviewAgentSessionStatus({
           number: workspace.snapshot.number,
@@ -252,15 +284,15 @@ export function ReviewWorkspace({
       }
     }
 
-    void pollActivity()
-    const interval = setInterval(() => void pollActivity(), 3_000)
+    void pollPendingThreads()
+    const interval = setInterval(() => void pollPendingThreads(), 3_000)
 
     return () => {
       cancelled = true
       clearInterval(interval)
     }
   }, [
-    askingAgentThreadId,
+    pendingAgentThreadsKey,
     workspace.snapshot.number,
     workspace.snapshot.owner,
     workspace.snapshot.repo,
@@ -475,32 +507,12 @@ export function ReviewWorkspace({
     [],
   )
 
+  /**
+   * Kicks off an agent turn. The request returns as soon as the question is
+   * queued (with the pending agent comment persisted server-side); the
+   * polling effect above drives it to completion.
+   */
   const runAgentReplyForThread = useCallback(async (threadId: string) => {
-    const placeholderId = `pending-agent-${threadId}`
-
-    setAskingAgentThreadId(threadId)
-    setReviewThreads((current) =>
-      current.map((thread) =>
-        thread.id === threadId
-          ? {
-              ...thread,
-              comments: [
-                ...thread.comments,
-                {
-                  agentState: 'pending',
-                  authorType: 'agent',
-                  authorUserId: null,
-                  body: '',
-                  createdAt: new Date().toISOString(),
-                  id: placeholderId,
-                  threadId,
-                },
-              ],
-            }
-          : thread,
-      ),
-    )
-
     try {
       const updated = await requestReviewThreadAgentReply(threadId)
       setReviewThreads((current) =>
@@ -508,22 +520,19 @@ export function ReviewWorkspace({
       )
     } catch (error) {
       const message = reviewThreadErrorMessage(error)
-      setReviewThreads((current) =>
-        current.map((thread) =>
-          thread.id === threadId
-            ? {
-                ...thread,
-                comments: thread.comments.map((comment) =>
-                  comment.id === placeholderId
-                    ? { ...comment, agentState: 'error', body: message }
-                    : comment,
-                ),
-              }
-            : thread,
-        ),
-      )
-    } finally {
-      setAskingAgentThreadId(null)
+      setThreadErrors((current) => ({ ...current, [threadId]: message }))
+      // The server marks the pending comment as errored too; refresh so the
+      // thread shows it.
+      try {
+        const refreshed = await pollReviewThreadAgentReply(threadId)
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === refreshed.id ? refreshed : thread,
+          ),
+        )
+      } catch {
+        // The inline thread error above is enough.
+      }
     }
   }, [])
 
@@ -688,7 +697,6 @@ export function ReviewWorkspace({
   const threadAnnotationHandlers = useMemo(
     () => ({
       agentActivity,
-      askingAgentThreadId,
       replyBodies,
       replyingThreadId,
       threadErrors,
@@ -701,7 +709,6 @@ export function ReviewWorkspace({
     [
       agentActivity,
       askAgentInThread,
-      askingAgentThreadId,
       replyBodies,
       replyingThreadId,
       threadErrors,
@@ -903,7 +910,6 @@ function countFilesByStatus(files: ReviewFile[]): Record<string, number> {
 
 function buildReviewThreadAnnotations(input: {
   agentActivity: string | null
-  askingAgentThreadId: string | null
   draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
   onAskAgent: (threadId: string) => void
   onReplyBodyChange: (threadId: string, body: string) => void
@@ -916,25 +922,31 @@ function buildReviewThreadAnnotations(input: {
   updatingStatusThreadId: string | null
 }): DiffLineAnnotation<ReviewThreadAnnotationData>[] {
   const annotations: DiffLineAnnotation<ReviewThreadAnnotationData>[] =
-    input.threads.map((thread) => ({
-      lineNumber: thread.lineStart,
-      metadata: {
-        agentActivity:
-          input.askingAgentThreadId === thread.id ? input.agentActivity : null,
-        error: input.threadErrors[thread.id] || null,
-        isAskingAgent: input.askingAgentThreadId === thread.id,
-        isReplying: input.replyingThreadId === thread.id,
-        isUpdatingStatus: input.updatingStatusThreadId === thread.id,
-        kind: 'thread',
-        replyBody: input.replyBodies[thread.id] ?? '',
-        thread,
-        onAskAgent: () => input.onAskAgent(thread.id),
-        onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
-        onReplySubmit: () => input.onReplySubmit(thread.id),
-        onStatusChange: (status) => input.onStatusChange(thread.id, status),
-      },
-      side: pierreSideFromReviewThreadDiffSide(thread.side),
-    }))
+    input.threads.map((thread) => {
+      const hasPendingAgentComment = thread.comments.some(
+        (comment) =>
+          comment.authorType === 'agent' && comment.agentState === 'pending',
+      )
+
+      return {
+        lineNumber: thread.lineStart,
+        metadata: {
+          agentActivity: hasPendingAgentComment ? input.agentActivity : null,
+          error: input.threadErrors[thread.id] || null,
+          isAskingAgent: hasPendingAgentComment,
+          isReplying: input.replyingThreadId === thread.id,
+          isUpdatingStatus: input.updatingStatusThreadId === thread.id,
+          kind: 'thread',
+          replyBody: input.replyBodies[thread.id] ?? '',
+          thread,
+          onAskAgent: () => input.onAskAgent(thread.id),
+          onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
+          onReplySubmit: () => input.onReplySubmit(thread.id),
+          onStatusChange: (status) => input.onStatusChange(thread.id, status),
+        },
+        side: pierreSideFromReviewThreadDiffSide(thread.side),
+      }
+    })
 
   if (input.draft) {
     annotations.push({

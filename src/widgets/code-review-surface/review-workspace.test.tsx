@@ -30,6 +30,7 @@ vi.mock('@/entities/review-thread', async () => {
       Promise.resolve({ activity: 'tool:Read', state: 'running' as const }),
     ),
     listReviewThreads: vi.fn(() => Promise.resolve([])),
+    pollReviewThreadAgentReply: vi.fn(),
     requestReviewThreadAgentReply: vi.fn(),
     updateReviewThreadStatus: vi.fn(),
   }
@@ -98,11 +99,13 @@ import { ReviewWorkspace } from './review-workspace'
 import {
   createReviewThread,
   listReviewThreads,
+  pollReviewThreadAgentReply,
   requestReviewThreadAgentReply,
 } from '@/entities/review-thread'
 
 const mockedCreateReviewThread = vi.mocked(createReviewThread)
 const mockedListReviewThreads = vi.mocked(listReviewThreads)
+const mockedPollReviewThreadAgentReply = vi.mocked(pollReviewThreadAgentReply)
 const mockedRequestReviewThreadAgentReply = vi.mocked(
   requestReviewThreadAgentReply,
 )
@@ -164,6 +167,10 @@ describe('ReviewWorkspace', () => {
     mockedListReviewThreads.mockResolvedValue([])
     mockedRequestReviewThreadAgentReply.mockReset()
     mockedRequestReviewThreadAgentReply.mockImplementation(
+      async (threadId: string) => makeAnsweredReviewThread(threadId),
+    )
+    mockedPollReviewThreadAgentReply.mockReset()
+    mockedPollReviewThreadAgentReply.mockImplementation(
       async (threadId: string) => makeAnsweredReviewThread(threadId),
     )
   })
@@ -287,6 +294,46 @@ describe('ReviewWorkspace', () => {
       expect(mockedRequestReviewThreadAgentReply).toHaveBeenCalledWith(
         'thread-1',
       )
+    })
+    expect(
+      await screen.findByText('It validates the token before use.'),
+    ).toBeInTheDocument()
+  })
+
+  it('polls a pending agent turn to completion', async () => {
+    const user = userEvent.setup()
+    const created = makeReviewThread({ body: 'What guarantees this path?' })
+    const withPending = {
+      ...created,
+      comments: [
+        ...created.comments,
+        {
+          agentState: 'pending' as const,
+          authorType: 'agent' as const,
+          authorUserId: null,
+          body: '',
+          createdAt: '2026-06-12T10:00:05.000Z',
+          id: 'comment-agent-1',
+          threadId: created.id,
+        },
+      ],
+    }
+    mockedCreateReviewThread.mockResolvedValue(created)
+    // Start returns immediately with the pending comment; the poll resolves it.
+    mockedRequestReviewThreadAgentReply.mockResolvedValue(withPending)
+
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    await user.click(screen.getByRole('button', { name: /Diff/ }))
+    await user.click(screen.getByRole('button', { name: 'Select line 1' }))
+    await user.type(
+      screen.getByLabelText('Review thread comment'),
+      'What guarantees this path?',
+    )
+    await user.click(screen.getByRole('button', { name: /Start thread/ }))
+
+    await waitFor(() => {
+      expect(mockedPollReviewThreadAgentReply).toHaveBeenCalledWith('thread-1')
     })
     expect(
       await screen.findByText('It validates the token before use.'),
