@@ -112,16 +112,31 @@ export async function updateReviewThreadStatus(input: {
 }
 
 /**
- * Asks the per-PR review agent to answer the latest reviewer question in the
- * thread. Resolves with the updated thread once the agent turn completes —
- * the agent comment goes through pending server-side (streaming is P8).
+ * Starts an agent reply for the latest reviewer question in the thread. The
+ * response returns as soon as the question is queued — completion is observed
+ * by polling pollReviewThreadAgentReply until the agent comment leaves the
+ * pending state.
  */
 export async function requestReviewThreadAgentReply(
   threadId: string,
 ): Promise<ReviewThread> {
+  return agentReplyRequest(threadId, { method: 'POST' })
+}
+
+/** One polling step of a running agent turn; returns the updated thread. */
+export async function pollReviewThreadAgentReply(
+  threadId: string,
+): Promise<ReviewThread> {
+  return agentReplyRequest(threadId, { method: 'GET' })
+}
+
+async function agentReplyRequest(
+  threadId: string,
+  init: RequestInit,
+): Promise<ReviewThread> {
   const response = await fetch(
     `/api/review-threads/${encodeURIComponent(threadId)}/agent-reply`,
-    { method: 'POST' },
+    init,
   )
   const body = (await readReviewThreadApiResponse(response)) as {
     error?: string

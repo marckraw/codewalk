@@ -103,16 +103,30 @@ export function buildReviewThreadAgentQuestionPrompt(input: {
 }
 
 /**
- * The agent reply for a turn is every assistant message item appended after
- * the recorded baseline. Per-PR turns are FIFO, so nothing else can interleave
- * between the baseline and the turn end.
+ * The agent reply for a turn is every assistant message item after the LAST
+ * user message in the daemon conversation. Questions are only sent while the
+ * session is idle (one turn at a time per PR), so at turn end the question is
+ * always the most recent user message — and unlike an in-memory baseline,
+ * this survives the process that sent the question dying mid-turn.
  */
-export function extractAgentReplyText(
+export function extractAgentReplyAfterLastUserMessage(
   conversation: AgentsDaemonConversationItem[],
-  baselineCount: number,
 ): string | null {
+  let lastUserIndex = -1
+
+  for (let index = 0; index < conversation.length; index += 1) {
+    const item = conversation[index]
+    if (item.kind === 'message' && item.actor === 'user') {
+      lastUserIndex = index
+    }
+  }
+
+  if (lastUserIndex === -1) {
+    return null
+  }
+
   const replies = conversation
-    .slice(baselineCount)
+    .slice(lastUserIndex + 1)
     .filter((item) => item.kind === 'message' && item.actor === 'assistant')
     .map((item) => item.text?.trim() ?? '')
     .filter(Boolean)
@@ -122,14 +136,6 @@ export function extractAgentReplyText(
   }
 
   return replies.join('\n\n')
-}
-
-export function buildReviewAgentTurnQueueKey(input: {
-  owner: string
-  pullRequestNumber: number
-  repo: string
-}) {
-  return `${input.owner.toLowerCase()}/${input.repo.toLowerCase()}#${input.pullRequestNumber}`
 }
 
 export function buildPullRequestReviewAgentSessionId(input: {

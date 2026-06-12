@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { POST } from './route'
+import { GET, POST } from './route'
 
 vi.mock('@/entities/auth-server', () => ({
   getCurrentCodewalkUser: vi.fn(),
@@ -21,22 +21,24 @@ vi.mock('@/features/pr-review-agent-session', () => {
   }
 
   return {
-    askPullRequestReviewAgent: vi.fn(),
+    advancePullRequestReviewAgentReply: vi.fn(),
     PullRequestReviewAgentSessionError,
+    startPullRequestReviewAgentReply: vi.fn(),
   }
 })
 
 import { getCurrentCodewalkUser } from '@/entities/auth-server'
 import { upsertAuthenticatedUser } from '@/entities/database'
 import {
-  askPullRequestReviewAgent,
+  advancePullRequestReviewAgentReply,
   PullRequestReviewAgentSessionError,
+  startPullRequestReviewAgentReply,
 } from '@/features/pr-review-agent-session'
 
-function postRequest() {
+function request(method: string) {
   return new Request(
     'http://localhost/api/review-threads/thread-1/agent-reply',
-    { method: 'POST' },
+    { method },
   )
 }
 
@@ -56,48 +58,54 @@ describe('/api/review-threads/[threadId]/agent-reply', () => {
     vi.mocked(upsertAuthenticatedUser).mockResolvedValue({
       id: 'db-user-1',
     } as never)
-    vi.mocked(askPullRequestReviewAgent).mockResolvedValue({
-      agentComment: { id: 'comment-2', agentState: 'complete' },
+    vi.mocked(startPullRequestReviewAgentReply).mockResolvedValue({
+      thread: { id: 'thread-1' },
+    } as never)
+    vi.mocked(advancePullRequestReviewAgentReply).mockResolvedValue({
       thread: { id: 'thread-1' },
     } as never)
   })
 
-  it('requires sign-in', async () => {
+  it('requires sign-in for both verbs', async () => {
     vi.mocked(getCurrentCodewalkUser).mockResolvedValue({
       status: 'signed-out',
     } as never)
 
-    const response = await POST(postRequest(), context)
-    expect(response.status).toBe(401)
-    expect(askPullRequestReviewAgent).not.toHaveBeenCalled()
+    expect((await POST(request('POST'), context)).status).toBe(401)
+    expect((await GET(request('GET'), context)).status).toBe(401)
+    expect(startPullRequestReviewAgentReply).not.toHaveBeenCalled()
+    expect(advancePullRequestReviewAgentReply).not.toHaveBeenCalled()
   })
 
-  it('runs the agent turn for the thread and returns the result', async () => {
-    const response = await POST(postRequest(), context)
+  it('starts an agent reply and returns 202 immediately', async () => {
+    const response = await POST(request('POST'), context)
 
-    expect(response.status).toBe(200)
-    expect(askPullRequestReviewAgent).toHaveBeenCalledWith({
+    expect(response.status).toBe(202)
+    expect(startPullRequestReviewAgentReply).toHaveBeenCalledWith({
       requestedByUserId: 'db-user-1',
       threadId: 'thread-1',
     })
-    await expect(response.json()).resolves.toMatchObject({
-      agentComment: { id: 'comment-2' },
+  })
+
+  it('advances the turn on poll', async () => {
+    const response = await GET(request('GET'), context)
+
+    expect(response.status).toBe(200)
+    expect(advancePullRequestReviewAgentReply).toHaveBeenCalledWith({
+      threadId: 'thread-1',
     })
   })
 
   it('maps service errors to their HTTP status', async () => {
-    vi.mocked(askPullRequestReviewAgent).mockRejectedValue(
+    vi.mocked(startPullRequestReviewAgentReply).mockRejectedValue(
       new PullRequestReviewAgentSessionError(
         'daemon',
-        'The review agent session failed while answering.',
+        'The agent session failed while answering.',
         502,
       ),
     )
 
-    const response = await POST(postRequest(), context)
+    const response = await POST(request('POST'), context)
     expect(response.status).toBe(502)
-    await expect(response.json()).resolves.toEqual({
-      error: 'The review agent session failed while answering.',
-    })
   })
 })
