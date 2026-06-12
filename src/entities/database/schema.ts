@@ -498,3 +498,108 @@ export const reviewProgress = pgTable(
     ),
   }),
 )
+
+export const reviewThreadStatus = pgEnum('review_thread_status', [
+  'open',
+  'resolved',
+  'outdated',
+])
+
+export const reviewThreadDiffSide = pgEnum('review_thread_diff_side', [
+  'old',
+  'new',
+])
+
+export const reviewThreadCommentAuthorType = pgEnum(
+  'review_thread_comment_author_type',
+  ['user', 'agent'],
+)
+
+export const reviewThreadAgentState = pgEnum('review_thread_agent_state', [
+  'pending',
+  'streaming',
+  'complete',
+  'error',
+])
+
+/**
+ * Anchored conversation threads on a guided review. Threads belong to the
+ * pull request identity (owner/repo/number), not to a snapshot: new pushes
+ * create new snapshot rows and threads must survive them (GitHub model).
+ * The snapshot and head sha the thread was created against are recorded for
+ * outdated detection, and the selected lines are denormalized into `excerpt`
+ * so outdated threads stay readable and agent prompts need no diff lookup.
+ */
+export const reviewThreads = pgTable(
+  'review_threads',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    owner: varchar('owner', { length: 191 }).notNull(),
+    repo: varchar('repo', { length: 191 }).notNull(),
+    pullRequestNumber: integer('pull_request_number').notNull(),
+    anchorSnapshotId: uuid('anchor_snapshot_id').references(
+      () => pullRequestSnapshots.id,
+      { onDelete: 'set null' },
+    ),
+    anchorCommitSha: varchar('anchor_commit_sha', { length: 64 }).notNull(),
+    filePath: text('file_path').notNull(),
+    side: reviewThreadDiffSide('side').default('new').notNull(),
+    lineStart: integer('line_start').notNull(),
+    lineEnd: integer('line_end').notNull(),
+    excerpt: text('excerpt').notNull(),
+    status: reviewThreadStatus('status').default('open').notNull(),
+    createdByUserId: uuid('created_by_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    pullRequestIdx: index('review_threads_pull_request_idx').on(
+      table.owner,
+      table.repo,
+      table.pullRequestNumber,
+    ),
+    statusIdx: index('review_threads_status_idx').on(table.status),
+  }),
+)
+
+export const reviewThreadComments = pgTable(
+  'review_thread_comments',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    threadId: uuid('thread_id')
+      .notNull()
+      .references(() => reviewThreads.id, { onDelete: 'cascade' }),
+    authorType: reviewThreadCommentAuthorType('author_type').notNull(),
+    authorUserId: uuid('author_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    body: text('body').notNull(),
+    agentState: reviewThreadAgentState('agent_state'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (table) => ({
+    threadIdx: index('review_thread_comments_thread_idx').on(
+      table.threadId,
+      table.createdAt,
+    ),
+  }),
+)
+
+export type ReviewThreadStatus = 'open' | 'resolved' | 'outdated'
+export type ReviewThreadDiffSide = 'old' | 'new'
+export type ReviewThreadCommentAuthorType = 'user' | 'agent'
+export type ReviewThreadAgentState =
+  | 'pending'
+  | 'streaming'
+  | 'complete'
+  | 'error'
+export type ReviewThreadRow = typeof reviewThreads.$inferSelect
+export type ReviewThreadCommentRow = typeof reviewThreadComments.$inferSelect
