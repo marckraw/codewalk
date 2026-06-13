@@ -4,8 +4,10 @@ import { asc, and, desc, eq, isNull } from 'drizzle-orm'
 import type {
   ReviewThreadAgentState,
   ReviewThreadCommentAuthorType,
+  ReviewThreadCommentKind,
   ReviewThreadCommentRow,
   ReviewThreadDiffSide,
+  ReviewThreadFixState,
   ReviewThreadRow,
 } from './schema'
 import { getDb } from './client'
@@ -32,6 +34,9 @@ export type ReviewThreadCommentInsert = {
   body: string
   agentState?: ReviewThreadAgentState | null
   agentSeqStart?: number | null
+  commentKind?: ReviewThreadCommentKind
+  fixState?: ReviewThreadFixState | null
+  commitSha?: string | null
 }
 
 export type ReviewThreadCommentUpdate = {
@@ -39,6 +44,8 @@ export type ReviewThreadCommentUpdate = {
   agentState?: ReviewThreadAgentState | null
   body?: string
   commentId: string
+  fixState?: ReviewThreadFixState | null
+  commitSha?: string | null
 }
 
 export type ReviewThreadWithComments = ReviewThreadRow & {
@@ -74,6 +81,9 @@ export function buildReviewThreadCommentRow(input: ReviewThreadCommentInsert) {
     body: input.body,
     agentState: input.agentState ?? null,
     agentSeqStart: input.agentSeqStart ?? null,
+    commentKind: input.commentKind ?? 'message',
+    fixState: input.fixState ?? null,
+    commitSha: input.commitSha ?? null,
   }
 }
 
@@ -178,6 +188,8 @@ export async function updateReviewThreadComment(
       ...(input.agentSeqStart === undefined
         ? {}
         : { agentSeqStart: input.agentSeqStart }),
+      ...(input.fixState === undefined ? {} : { fixState: input.fixState }),
+      ...(input.commitSha === undefined ? {} : { commitSha: input.commitSha }),
     })
     .where(eq(reviewThreadComments.id, input.commentId))
     .returning()

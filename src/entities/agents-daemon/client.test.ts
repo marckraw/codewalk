@@ -182,6 +182,46 @@ describe('AgentsDaemonClient', () => {
     })
   })
 
+  it('pushes the execution workspace to a branch', async () => {
+    const fetch = vi.fn().mockResolvedValueOnce(
+      jsonResponse(
+        {
+          branch: 'feature/x',
+          commitSha: 'abc1234',
+          protocolVersion: 1,
+          pushed: true,
+        },
+        200,
+      ),
+    )
+    const client = new AgentsDaemonClient({
+      apiToken: 'secret-token',
+      baseUrl: 'https://daemon.example.com',
+      fetch,
+    })
+
+    await expect(
+      client.pushExecutionSessionWorkspace({
+        branch: 'feature/x',
+        sessionId: 'session-1',
+      }),
+    ).resolves.toEqual({
+      branch: 'feature/x',
+      commitSha: 'abc1234',
+      pushed: true,
+    })
+
+    expect(fetch).toHaveBeenNthCalledWith(
+      1,
+      'https://daemon.example.com/v0/execution/sessions/session-1/push',
+      expect.objectContaining({ method: 'POST' }),
+    )
+    expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toEqual({
+      branch: 'feature/x',
+      protocolVersion: 1,
+    })
+  })
+
   it('posts guide generation requests to the daemon', async () => {
     const fetch = vi.fn().mockResolvedValue(jsonResponse(generatePayload))
     const client = new AgentsDaemonClient({

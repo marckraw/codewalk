@@ -21,6 +21,8 @@ export {
   type AgentsDaemonConversationItem,
   type AgentsDaemonExecutionCommandInput,
   type AgentsDaemonExecutionCommandResult,
+  type AgentsDaemonExecutionPushInput,
+  type AgentsDaemonExecutionPushResult,
   type AgentsDaemonExecutionSessionSnapshot,
   type AgentsDaemonExecutionSessionStatus,
   type AgentsDaemonExecutionStartInput,

@@ -529,6 +529,18 @@ export const reviewAgentSessionStatus = pgEnum('review_agent_session_status', [
   'failed',
 ])
 
+export const reviewThreadCommentKind = pgEnum('review_thread_comment_kind', [
+  'message',
+  'fix-proposal',
+  'system',
+])
+
+export const reviewThreadFixState = pgEnum('review_thread_fix_state', [
+  'proposed',
+  'pushed',
+  'discarded',
+])
+
 /**
  * Anchored conversation threads on a guided review. Threads belong to the
  * pull request identity (owner/repo/number), not to a snapshot: new pushes
@@ -592,6 +604,17 @@ export const reviewThreadComments = pgTable(
     // Per-PR turns are FIFO, so conversation growth after this point belongs
     // to the pending agent reply (recovery + P8 streaming).
     agentSeqStart: integer('agent_seq_start'),
+    // P7 fix flow. `message` is an ordinary question/answer; `fix-proposal` is
+    // an agent comment whose turn committed a change in the workspace and
+    // awaits an explicit push; `system` is a machine note (e.g. a push result).
+    commentKind: reviewThreadCommentKind('comment_kind')
+      .default('message')
+      .notNull(),
+    // Lifecycle of a fix-proposal: proposed -> pushed | discarded. Null for
+    // every other comment kind.
+    fixState: reviewThreadFixState('fix_state'),
+    // The commit sha published to the PR head branch when a fix is approved.
+    commitSha: varchar('commit_sha', { length: 64 }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -655,6 +678,8 @@ export type ReviewThreadAgentState =
   | 'streaming'
   | 'complete'
   | 'error'
+export type ReviewThreadCommentKind = 'message' | 'fix-proposal' | 'system'
+export type ReviewThreadFixState = 'proposed' | 'pushed' | 'discarded'
 export type ReviewThreadRow = typeof reviewThreads.$inferSelect
 export type ReviewThreadCommentRow = typeof reviewThreadComments.$inferSelect
 export type ReviewAgentSessionStatus =

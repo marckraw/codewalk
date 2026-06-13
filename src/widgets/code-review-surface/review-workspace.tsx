@@ -7,13 +7,16 @@ import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import {
   addReviewThreadComment,
+  approveReviewThreadFix,
   buildReviewThreadSelectionAnchor,
   createReviewThread,
+  discardReviewThreadFix,
   extendReviewThreadSelection,
   fetchReviewAgentSessionStatus,
   listReviewThreads,
   pierreSideFromReviewThreadDiffSide,
   pollReviewThreadAgentReply,
+  requestReviewThreadAgentFix,
   requestReviewThreadAgentReply,
   updateReviewThreadStatus,
   type ReviewThread,
@@ -113,6 +116,13 @@ export function ReviewWorkspace({
   const [updatingStatusThreadId, setUpdatingStatusThreadId] = useState<
     string | null
   >(null)
+  const [askingFixThreadId, setAskingFixThreadId] = useState<string | null>(
+    null,
+  )
+  const [fixAction, setFixAction] = useState<{
+    commentId: string
+    kind: 'push' | 'discard'
+  } | null>(null)
   const shiftPressedRef = useRef(false)
   const selectionFileRef = useRef<string | null>(null)
 
@@ -613,6 +623,83 @@ export function ReviewWorkspace({
     [replyBodies],
   )
 
+  /**
+   * Asks the agent to implement the discussed change. Any text in the reply
+   * box is an optional instruction. The returned thread has a pending
+   * fix-proposal comment that the polling effect drives to completion.
+   */
+  const askAgentToFixInThread = useCallback(
+    async (threadId: string) => {
+      const instruction = replyBodies[threadId]?.trim() || undefined
+
+      setAskingFixThreadId(threadId)
+      setThreadErrors((current) => ({ ...current, [threadId]: '' }))
+
+      try {
+        const updated = await requestReviewThreadAgentFix({
+          instruction,
+          threadId,
+        })
+        setReviewThreads((current) =>
+          current.map((thread) => (thread.id === threadId ? updated : thread)),
+        )
+        setReplyBodies((current) => ({ ...current, [threadId]: '' }))
+      } catch (error) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: reviewThreadErrorMessage(error),
+        }))
+      } finally {
+        setAskingFixThreadId(null)
+      }
+    },
+    [replyBodies],
+  )
+
+  const approveFixInThread = useCallback(
+    async (threadId: string, commentId: string) => {
+      setFixAction({ commentId, kind: 'push' })
+      setThreadErrors((current) => ({ ...current, [threadId]: '' }))
+
+      try {
+        const updated = await approveReviewThreadFix({ commentId, threadId })
+        setReviewThreads((current) =>
+          current.map((thread) => (thread.id === threadId ? updated : thread)),
+        )
+      } catch (error) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: reviewThreadErrorMessage(error),
+        }))
+      } finally {
+        setFixAction(null)
+      }
+    },
+    [],
+  )
+
+  const discardFixInThread = useCallback(
+    async (threadId: string, commentId: string) => {
+      setFixAction({ commentId, kind: 'discard' })
+      setThreadErrors((current) => ({ ...current, [threadId]: '' }))
+
+      try {
+        const updated = await discardReviewThreadFix({ commentId, threadId })
+        setReviewThreads((current) =>
+          current.map((thread) => (thread.id === threadId ? updated : thread)),
+        )
+      } catch (error) {
+        setThreadErrors((current) => ({
+          ...current,
+          [threadId]: reviewThreadErrorMessage(error),
+        }))
+      } finally {
+        setFixAction(null)
+      }
+    },
+    [],
+  )
+
   const submitReviewThreadDraft = useCallback(async () => {
     if (!selectedFile) {
       setDraftError('Select a file before starting a thread.')
@@ -697,18 +784,28 @@ export function ReviewWorkspace({
   const threadAnnotationHandlers = useMemo(
     () => ({
       agentActivity,
+      askingFixThreadId,
+      fixAction,
       replyBodies,
       replyingThreadId,
       threadErrors,
       updatingStatusThreadId,
+      onApproveFix: approveFixInThread,
       onAskAgent: askAgentInThread,
+      onAskFix: askAgentToFixInThread,
+      onDiscardFix: discardFixInThread,
       onReplyBodyChange: updateReplyBody,
       onReplySubmit: submitReviewThreadReply,
       onStatusChange: updateReviewThreadStatusFromAnnotation,
     }),
     [
       agentActivity,
+      approveFixInThread,
       askAgentInThread,
+      askAgentToFixInThread,
+      askingFixThreadId,
+      discardFixInThread,
+      fixAction,
       replyBodies,
       replyingThreadId,
       threadErrors,
@@ -910,8 +1007,13 @@ function countFilesByStatus(files: ReviewFile[]): Record<string, number> {
 
 function buildReviewThreadAnnotations(input: {
   agentActivity: string | null
+  askingFixThreadId: string | null
   draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
+  fixAction: { commentId: string; kind: 'push' | 'discard' } | null
+  onApproveFix: (threadId: string, commentId: string) => void
   onAskAgent: (threadId: string) => void
+  onAskFix: (threadId: string) => void
+  onDiscardFix: (threadId: string, commentId: string) => void
   onReplyBodyChange: (threadId: string, body: string) => void
   onReplySubmit: (threadId: string) => void
   onStatusChange: (threadId: string, status: 'open' | 'resolved') => void
@@ -933,13 +1035,20 @@ function buildReviewThreadAnnotations(input: {
         metadata: {
           agentActivity: hasPendingAgentComment ? input.agentActivity : null,
           error: input.threadErrors[thread.id] || null,
+          fixActionCommentId: input.fixAction?.commentId ?? null,
           isAskingAgent: hasPendingAgentComment,
+          isAskingFix: input.askingFixThreadId === thread.id,
+          isDiscardingFix: input.fixAction?.kind === 'discard',
+          isPushingFix: input.fixAction?.kind === 'push',
           isReplying: input.replyingThreadId === thread.id,
           isUpdatingStatus: input.updatingStatusThreadId === thread.id,
           kind: 'thread',
           replyBody: input.replyBodies[thread.id] ?? '',
           thread,
+          onApproveFix: (commentId) => input.onApproveFix(thread.id, commentId),
           onAskAgent: () => input.onAskAgent(thread.id),
+          onAskFix: () => input.onAskFix(thread.id),
+          onDiscardFix: (commentId) => input.onDiscardFix(thread.id, commentId),
           onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
           onReplySubmit: () => input.onReplySubmit(thread.id),
           onStatusChange: (status) => input.onStatusChange(thread.id, status),

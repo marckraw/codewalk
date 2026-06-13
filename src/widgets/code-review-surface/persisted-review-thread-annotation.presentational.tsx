@@ -1,5 +1,15 @@
 import type { FormEvent } from 'react'
-import { Bot, CheckCircle2, MessageCircle, RotateCcw, Send } from 'lucide-react'
+import {
+  Bot,
+  Check,
+  CheckCircle2,
+  GitCommitHorizontal,
+  MessageCircle,
+  RotateCcw,
+  Send,
+  Wrench,
+  X,
+} from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { describeReviewAgentActivity } from './review-agent-activity.pure'
@@ -62,31 +72,98 @@ export function PersistedReviewThreadAnnotation({
       </div>
       <ThreadExcerpt excerpt={thread.excerpt} />
       <ol className="divide-y divide-[var(--border)]">
-        {thread.comments.map((comment) => (
-          <li className="grid gap-1 px-3 py-2" key={comment.id}>
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--muted)]">
-              {comment.authorType === 'agent' ? (
-                <Bot aria-hidden="true" className="size-3.5" />
-              ) : (
-                <MessageCircle aria-hidden="true" className="size-3.5" />
-              )}
-              <span>
-                {comment.authorType === 'agent' ? 'Agent' : 'Reviewer'}
-              </span>
-              {comment.agentState ? (
-                <span className="font-normal">
-                  ·{' '}
-                  {comment.agentState === 'pending' && annotation.agentActivity
-                    ? describeReviewAgentActivity(annotation.agentActivity)
-                    : comment.agentState}
+        {thread.comments.map((comment) => {
+          if (comment.commentKind === 'system') {
+            return (
+              <li
+                className="flex items-center gap-1.5 px-3 py-2 text-[11px] text-[var(--muted)]"
+                key={comment.id}
+              >
+                <GitCommitHorizontal aria-hidden="true" className="size-3.5" />
+                <span className="whitespace-pre-wrap">{comment.body}</span>
+              </li>
+            )
+          }
+
+          const isFixProposal = comment.commentKind === 'fix-proposal'
+          const isActing = annotation.fixActionCommentId === comment.id
+
+          return (
+            <li className="grid gap-1 px-3 py-2" key={comment.id}>
+              <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--muted)]">
+                {comment.authorType === 'agent' ? (
+                  <Bot aria-hidden="true" className="size-3.5" />
+                ) : (
+                  <MessageCircle aria-hidden="true" className="size-3.5" />
+                )}
+                <span>
+                  {comment.authorType === 'agent' ? 'Agent' : 'Reviewer'}
+                </span>
+                {isFixProposal ? (
+                  <Badge className="h-5 gap-1 px-1.5" tone="default">
+                    <Wrench aria-hidden="true" className="size-3" />
+                    Fix
+                  </Badge>
+                ) : null}
+                {comment.agentState ? (
+                  <span className="font-normal">
+                    ·{' '}
+                    {comment.agentState === 'pending' &&
+                    annotation.agentActivity
+                      ? describeReviewAgentActivity(annotation.agentActivity)
+                      : comment.agentState}
+                  </span>
+                ) : null}
+              </div>
+              {comment.body ? (
+                <p className="whitespace-pre-wrap leading-5 text-[var(--foreground)]">
+                  {comment.body}
+                </p>
+              ) : null}
+              {isFixProposal && comment.fixState === 'proposed' ? (
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    disabled={isActing}
+                    onClick={() => annotation.onDiscardFix(comment.id)}
+                    size="sm"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <X aria-hidden="true" className="size-3.5" />
+                    {annotation.isDiscardingFix && isActing
+                      ? 'Discarding'
+                      : 'Discard'}
+                  </Button>
+                  <Button
+                    disabled={isActing}
+                    onClick={() => annotation.onApproveFix(comment.id)}
+                    size="sm"
+                    type="button"
+                    variant="primary"
+                  >
+                    <Check aria-hidden="true" className="size-3.5" />
+                    {annotation.isPushingFix && isActing
+                      ? 'Pushing'
+                      : 'Approve and push'}
+                  </Button>
+                </div>
+              ) : null}
+              {isFixProposal &&
+              comment.fixState === 'pushed' &&
+              comment.commitSha ? (
+                <Badge className="w-fit gap-1" tone="success">
+                  <GitCommitHorizontal aria-hidden="true" className="size-3" />
+                  Pushed {comment.commitSha.slice(0, 7)}
+                </Badge>
+              ) : null}
+              {isFixProposal && comment.fixState === 'discarded' ? (
+                <span className="text-[11px] text-[var(--muted)]">
+                  Discarded
                 </span>
               ) : null}
-            </div>
-            <p className="whitespace-pre-wrap leading-5 text-[var(--foreground)]">
-              {comment.body}
-            </p>
-          </li>
-        ))}
+            </li>
+          )
+        })}
       </ol>
       <form
         className="grid gap-2 border-t border-[var(--border)] p-3"
@@ -103,6 +180,16 @@ export function PersistedReviewThreadAnnotation({
           <p className="text-[var(--danger)]">{annotation.error}</p>
         ) : null}
         <div className="flex justify-end gap-2">
+          <Button
+            disabled={annotation.isAskingFix || annotation.isAskingAgent}
+            onClick={annotation.onAskFix}
+            size="sm"
+            type="button"
+            variant="ghost"
+          >
+            <Wrench aria-hidden="true" className="size-3.5" />
+            {annotation.isAskingFix ? 'Asking fix' : 'Ask to fix'}
+          </Button>
           <Button
             disabled={
               annotation.isAskingAgent ||

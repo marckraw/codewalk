@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildPullRequestReviewAgentInitialPrompt,
   buildPullRequestReviewAgentSessionId,
+  buildReviewThreadAgentFixPrompt,
   buildReviewThreadAgentQuestionPrompt,
   extractAgentReplyAfterLastUserMessage,
 } from './pr-review-agent-session.pure'
@@ -72,6 +73,27 @@ describe('PR review agent session helpers', () => {
     expect(prompt).toContain('const token = parse(header)')
     expect(prompt).toContain('Reviewer: Earlier question')
     expect(prompt).toContain('Question: Why is this safe?')
+  })
+
+  it('builds a fix prompt that commits locally without pushing', () => {
+    const prompt = buildReviewThreadAgentFixPrompt({
+      anchor: {
+        anchorCommitSha: 'abc123',
+        excerpt: 'const token = parse(header)',
+        filePath: 'src/auth.ts',
+        lineEnd: 14,
+        lineStart: 10,
+        side: 'new',
+      },
+      history: [{ authorType: 'agent', body: 'This could overflow.' }],
+      instruction: 'Guard the parse call',
+    })
+
+    expect(prompt).toContain('File: src/auth.ts')
+    expect(prompt).toContain('Reviewer instruction: Guard the parse call')
+    expect(prompt).toContain('commit it locally')
+    expect(prompt).toContain('Do NOT push')
+    expect(prompt).toContain('diffstat')
   })
 
   it('extracts assistant messages after the last user message', () => {

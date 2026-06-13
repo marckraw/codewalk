@@ -10,6 +10,7 @@ import {
 import {
   addReviewThreadComment,
   claimReviewThreadAgentTurn,
+  getLatestPullRequestSnapshotByRef,
   getReviewAgentSessionForPullRequest,
   getReviewThread,
   updateReviewAgentSessionFromSnapshot,
@@ -22,6 +23,7 @@ import {
   PullRequestReviewAgentSessionError,
 } from './pr-review-agent-session.service'
 import {
+  buildReviewThreadAgentFixPrompt,
   buildReviewThreadAgentQuestionPrompt,
   extractAgentReplyAfterLastUserMessage,
 } from './pr-review-agent-session.pure'
@@ -108,6 +110,254 @@ export async function startPullRequestReviewAgentReply(input: {
     client,
     threadId: thread.id,
   })
+}
+
+/**
+ * Asks the agent to implement the change discussed in the thread. Records the
+ * instruction as a reviewer comment, then a pending fix-proposal agent comment
+ * driven by the same turn state machine as a question. When the turn completes
+ * the proposal moves to `fixState: 'proposed'`, awaiting an explicit push.
+ */
+export async function startPullRequestReviewAgentFix(input: {
+  client?: ReviewAgentReplyClient
+  instruction?: string | null
+  requestedByUserId: string | null
+  threadId: string
+}): Promise<ReviewAgentReplyResult> {
+  const thread = await getReviewThread(input.threadId)
+
+  if (!thread) {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'Review thread was not found.',
+      404,
+    )
+  }
+
+  if (!thread.anchorSnapshotId) {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'The thread is not linked to an imported pull request snapshot.',
+      409,
+    )
+  }
+
+  if (thread.comments.some(isPendingAgentComment)) {
+    return { thread }
+  }
+
+  const instruction =
+    input.instruction?.trim() ||
+    'Implement the fix we discussed in this thread.'
+
+  await addReviewThreadComment({
+    authorType: 'user',
+    authorUserId: input.requestedByUserId,
+    body: instruction,
+    threadId: thread.id,
+  })
+  await addReviewThreadComment({
+    agentState: 'pending',
+    authorType: 'agent',
+    authorUserId: null,
+    body: '',
+    commentKind: 'fix-proposal',
+    threadId: thread.id,
+  })
+
+  const client = input.client ?? createConfiguredClient()
+
+  try {
+    await ensurePullRequestReviewAgentSession({
+      client,
+      requestedByUserId: input.requestedByUserId,
+      snapshotId: thread.anchorSnapshotId,
+    })
+  } catch (error) {
+    await failPendingAgentComments(thread.id, describeTurnError(error))
+    throw error
+  }
+
+  return advancePullRequestReviewAgentReply({
+    client,
+    threadId: thread.id,
+  })
+}
+
+/**
+ * Publishes the commits the agent made for a proposed fix to the PR head
+ * branch via the daemon, marks the proposal pushed, and records a system note
+ * with the commit sha. A re-import of the PR then flags threads on the changed
+ * lines outdated (P5).
+ */
+export async function approvePullRequestReviewAgentFix(input: {
+  client?: Pick<AgentsDaemonClient, 'pushExecutionSessionWorkspace'>
+  commentId: string
+  threadId: string
+}): Promise<ReviewAgentReplyResult> {
+  const thread = await getReviewThread(input.threadId)
+
+  if (!thread) {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'Review thread was not found.',
+      404,
+    )
+  }
+
+  const proposal = findProposedFix(thread, input.commentId)
+  const session = await getReviewAgentSessionForPullRequest({
+    owner: thread.owner,
+    pullRequestNumber: thread.pullRequestNumber,
+    repo: thread.repo,
+  })
+
+  if (!session) {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'No agent session exists for this pull request. Ask the agent to fix again.',
+      409,
+    )
+  }
+
+  const snapshot = await getLatestPullRequestSnapshotByRef({
+    number: thread.pullRequestNumber,
+    owner: thread.owner,
+    repo: thread.repo,
+  })
+
+  if (!snapshot) {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'The pull request snapshot is missing. Re-import the pull request.',
+      409,
+    )
+  }
+
+  const client = input.client ?? createConfiguredClient()
+  let result: Awaited<
+    ReturnType<AgentsDaemonClient['pushExecutionSessionWorkspace']>
+  >
+
+  try {
+    result = await client.pushExecutionSessionWorkspace({
+      branch: snapshot.headRef,
+      sessionId: session.daemonSessionId,
+    })
+  } catch (error) {
+    throw toReplyError(error)
+  }
+
+  if (!result.pushed) {
+    // No new commits to publish — most likely the session was recreated (head
+    // moved or daemon restart) and the agent's local commit was lost. Leave the
+    // proposal open so the reviewer can ask the agent to fix again.
+    await addReviewThreadComment({
+      authorType: 'agent',
+      authorUserId: null,
+      body: 'Nothing to push: the agent workspace had no new commits. The session may have been recreated — ask the agent to make the fix again, then approve.',
+      commentKind: 'system',
+      threadId: thread.id,
+    })
+    return refreshedThread(thread.id)
+  }
+
+  await updateReviewThreadComment({
+    commentId: proposal.id,
+    commitSha: result.commitSha,
+    fixState: 'pushed',
+  })
+  await addReviewThreadComment({
+    authorType: 'agent',
+    authorUserId: null,
+    body: `Pushed \`${result.commitSha}\` to \`${result.branch}\`.`,
+    commentKind: 'system',
+    commitSha: result.commitSha,
+    threadId: thread.id,
+  })
+
+  return refreshedThread(thread.id)
+}
+
+/**
+ * Discards a proposed fix: marks it discarded and best-effort asks the agent to
+ * drop the commit it made, so the workspace matches the PR head for the next
+ * fix. The revert is fire-and-forget — a failure must not block the discard.
+ */
+export async function discardPullRequestReviewAgentFix(input: {
+  client?: Pick<AgentsDaemonClient, 'sendExecutionSessionMessage'>
+  commentId: string
+  threadId: string
+}): Promise<ReviewAgentReplyResult> {
+  const thread = await getReviewThread(input.threadId)
+
+  if (!thread) {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'Review thread was not found.',
+      404,
+    )
+  }
+
+  const proposal = findProposedFix(thread, input.commentId)
+
+  await updateReviewThreadComment({
+    commentId: proposal.id,
+    fixState: 'discarded',
+  })
+
+  const session = await getReviewAgentSessionForPullRequest({
+    owner: thread.owner,
+    pullRequestNumber: thread.pullRequestNumber,
+    repo: thread.repo,
+  })
+
+  if (session) {
+    try {
+      const client = input.client ?? createConfiguredClient()
+      await client.sendExecutionSessionMessage({
+        sessionId: session.daemonSessionId,
+        text: 'The reviewer discarded the change you proposed. Drop the commit you just made so the workspace matches the pull request head again (e.g. `git reset --hard HEAD~1` if it was a single commit). Do not make any new changes.',
+      })
+    } catch {
+      // Best effort: the proposal is already marked discarded.
+    }
+  }
+
+  await addReviewThreadComment({
+    authorType: 'agent',
+    authorUserId: null,
+    body: 'Discarded the proposed fix.',
+    commentKind: 'system',
+    threadId: thread.id,
+  })
+
+  return refreshedThread(thread.id)
+}
+
+function findProposedFix(
+  thread: ReviewThreadWithComments,
+  commentId: string,
+): ReviewThreadCommentRow {
+  const proposal = thread.comments.find((comment) => comment.id === commentId)
+
+  if (!proposal || proposal.commentKind !== 'fix-proposal') {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'No fix proposal was found for this comment.',
+      404,
+    )
+  }
+
+  if (proposal.fixState !== 'proposed') {
+    throw new PullRequestReviewAgentSessionError(
+      'not-found',
+      'This fix proposal is no longer awaiting a decision.',
+      409,
+    )
+  }
+
+  return proposal
 }
 
 /**
@@ -201,6 +451,11 @@ export async function advancePullRequestReviewAgentReply(input: {
         replyText ??
         'The agent finished the turn without a text reply. Check the daemon session for details.',
       commentId: oldest.id,
+      // A completed fix-proposal turn means the agent committed in its
+      // workspace; the proposal now awaits an explicit push.
+      ...(oldest.commentKind === 'fix-proposal'
+        ? { fixState: 'proposed' as const }
+        : {}),
     })
     await persistSessionSnapshot(session.id, snapshot)
   }
@@ -224,21 +479,37 @@ async function claimAndSendQuestion(params: {
     return
   }
 
-  const question = latestReviewerQuestion(thread)
+  // The latest reviewer message is the question (for a normal turn) or the fix
+  // instruction (for a fix-proposal turn — started by recording the
+  // instruction as a reviewer comment). Either way it anchors the prompt.
+  const latest = latestReviewerQuestion(thread)
+  const history = thread.comments
+    .filter(
+      (comment) =>
+        comment.body.trim() &&
+        comment.body !== latest &&
+        comment.commentKind !== 'system',
+    )
+    .map((comment) => ({
+      authorType: comment.authorType,
+      body: comment.body,
+    }))
 
   try {
     await client.sendExecutionSessionMessage({
       sessionId: snapshot.sessionId,
-      text: buildReviewThreadAgentQuestionPrompt({
-        anchor: thread,
-        history: thread.comments
-          .filter((comment) => comment.body.trim() && comment.body !== question)
-          .map((comment) => ({
-            authorType: comment.authorType,
-            body: comment.body,
-          })),
-        question: question ?? '',
-      }),
+      text:
+        oldest.commentKind === 'fix-proposal'
+          ? buildReviewThreadAgentFixPrompt({
+              anchor: thread,
+              history,
+              instruction: latest ?? '',
+            })
+          : buildReviewThreadAgentQuestionPrompt({
+              anchor: thread,
+              history,
+              question: latest ?? '',
+            }),
     })
   } catch (error) {
     await updateReviewThreadComment({

@@ -103,6 +103,58 @@ export function buildReviewThreadAgentQuestionPrompt(input: {
 }
 
 /**
+ * The follow-up sent when a reviewer asks the agent to implement the change
+ * discussed in the thread. The agent commits locally in its workspace but must
+ * NOT push — publishing to the PR branch is a separate, explicitly-confirmed
+ * step. The reply is a summary plus a diffstat the reviewer approves or
+ * discards.
+ */
+export function buildReviewThreadAgentFixPrompt(input: {
+  anchor: ReviewAgentThreadAnchor
+  history: ReviewAgentThreadHistoryEntry[]
+  instruction: string
+}) {
+  const historyLines =
+    input.history.length > 0
+      ? [
+          'Earlier comments in this thread:',
+          ...input.history.map(
+            (entry) =>
+              `${entry.authorType === 'agent' ? 'Agent' : 'Reviewer'}: ${entry.body}`,
+          ),
+          '',
+        ]
+      : []
+
+  const instructionLines = input.instruction.trim()
+    ? [`Reviewer instruction: ${input.instruction.trim()}`, '']
+    : ['Implement the change discussed above.', '']
+
+  return [
+    'A reviewer asked you to implement a fix for a diff selection.',
+    '',
+    `File: ${input.anchor.filePath}`,
+    `Lines: ${input.anchor.lineStart}-${input.anchor.lineEnd} (${
+      input.anchor.side === 'old' ? 'old' : 'new'
+    } side, at commit ${input.anchor.anchorCommitSha})`,
+    'Selected lines:',
+    '```',
+    input.anchor.excerpt,
+    '```',
+    '',
+    ...historyLines,
+    ...instructionLines,
+    'Make the change in the workspace and commit it locally with a clear',
+    'message. Do NOT push or open a pull request — the reviewer publishes the',
+    'commit in a separate step.',
+    '',
+    'Then reply with a short summary of what you changed and a diffstat',
+    '(files touched with +/- line counts). If no change is needed, say so and',
+    'commit nothing.',
+  ].join('\n')
+}
+
+/**
  * The agent reply for a turn is every assistant message item after the LAST
  * user message in the daemon conversation. Questions are only sent while the
  * session is idle (one turn at a time per PR), so at turn end the question is
