@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { asc, and, desc, eq, isNull } from 'drizzle-orm'
+import { asc, and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type {
   ReviewThreadAgentState,
   ReviewThreadCommentAuthorType,
@@ -11,7 +11,15 @@ import type {
   ReviewThreadRow,
 } from './schema'
 import { getDb } from './client'
-import { reviewThreadComments, reviewThreads } from './schema'
+import { reviewThreadComments, reviewThreads, users } from './schema'
+
+/**
+ * A comment plus its author's display name (resolved from the users table).
+ * Optional so plain row fixtures stay assignable; queries always populate it.
+ */
+export type ReviewThreadCommentRecord = ReviewThreadCommentRow & {
+  authorName?: string | null
+}
 
 export type ReviewThreadInsert = {
   owner: string
@@ -49,7 +57,41 @@ export type ReviewThreadCommentUpdate = {
 }
 
 export type ReviewThreadWithComments = ReviewThreadRow & {
-  comments: ReviewThreadCommentRow[]
+  comments: ReviewThreadCommentRecord[]
+}
+
+/**
+ * Resolves each comment's author display name from the users table. Agent and
+ * authorless comments resolve to null; the UI renders those by author type.
+ */
+async function attachCommentAuthors(
+  comments: ReviewThreadCommentRow[],
+): Promise<ReviewThreadCommentRecord[]> {
+  const authorIds = [
+    ...new Set(
+      comments
+        .map((comment) => comment.authorUserId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ]
+
+  if (authorIds.length === 0) {
+    return comments.map((comment) => ({ ...comment, authorName: null }))
+  }
+
+  const db = getDb()
+  const authors = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(inArray(users.id, authorIds))
+  const nameById = new Map(authors.map((author) => [author.id, author.name]))
+
+  return comments.map((comment) => ({
+    ...comment,
+    authorName: comment.authorUserId
+      ? (nameById.get(comment.authorUserId) ?? null)
+      : null,
+  }))
 }
 
 /**
@@ -106,7 +148,7 @@ export async function createReviewThread(
       }),
     )
     .returning()
-  return { ...thread, comments: [comment] }
+  return { ...thread, comments: await attachCommentAuthors([comment]) }
 }
 
 export async function listReviewThreadsForPullRequest(input: {
@@ -136,7 +178,10 @@ export async function listReviewThreadsForPullRequest(input: {
       .from(reviewThreadComments)
       .where(eq(reviewThreadComments.threadId, thread.id))
       .orderBy(asc(reviewThreadComments.createdAt))
-    withComments.push({ ...thread, comments })
+    withComments.push({
+      ...thread,
+      comments: await attachCommentAuthors(comments),
+    })
   }
   return withComments
 }
@@ -156,12 +201,12 @@ export async function getReviewThread(
     .from(reviewThreadComments)
     .where(eq(reviewThreadComments.threadId, threadId))
     .orderBy(asc(reviewThreadComments.createdAt))
-  return { ...thread, comments }
+  return { ...thread, comments: await attachCommentAuthors(comments) }
 }
 
 export async function addReviewThreadComment(
   input: ReviewThreadCommentInsert,
-): Promise<ReviewThreadCommentRow> {
+): Promise<ReviewThreadCommentRecord> {
   const db = getDb()
   const [comment] = await db
     .insert(reviewThreadComments)
@@ -171,7 +216,8 @@ export async function addReviewThreadComment(
     .update(reviewThreads)
     .set({ updatedAt: new Date() })
     .where(eq(reviewThreads.id, input.threadId))
-  return comment
+  const [record] = await attachCommentAuthors([comment])
+  return record
 }
 
 export async function updateReviewThreadComment(
