@@ -240,13 +240,7 @@ export function ReviewWorkspace({
   const pendingAgentThreadIds = useMemo(
     () =>
       reviewThreads
-        .filter((thread) =>
-          thread.comments.some(
-            (comment) =>
-              comment.authorType === 'agent' &&
-              comment.agentState === 'pending',
-          ),
-        )
+        .filter((thread) => thread.comments.some(isAgentReplyInFlight))
         .map((thread) => thread.id),
     [reviewThreads],
   )
@@ -295,7 +289,9 @@ export function ReviewWorkspace({
     }
 
     void pollPendingThreads()
-    const interval = setInterval(() => void pollPendingThreads(), 3_000)
+    // Poll faster while a turn is in flight so the streamed reply updates feel
+    // close to live rather than arriving in 3s chunks.
+    const interval = setInterval(() => void pollPendingThreads(), 1_200)
 
     return () => {
       cancelled = true
@@ -1025,10 +1021,7 @@ function buildReviewThreadAnnotations(input: {
 }): DiffLineAnnotation<ReviewThreadAnnotationData>[] {
   const annotations: DiffLineAnnotation<ReviewThreadAnnotationData>[] =
     input.threads.map((thread) => {
-      const hasPendingAgentComment = thread.comments.some(
-        (comment) =>
-          comment.authorType === 'agent' && comment.agentState === 'pending',
-      )
+      const hasPendingAgentComment = thread.comments.some(isAgentReplyInFlight)
 
       return {
         lineNumber: thread.lineStart,
@@ -1070,4 +1063,18 @@ function buildReviewThreadAnnotations(input: {
 
 function reviewThreadErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Review threads unavailable.'
+}
+
+/**
+ * An agent reply still in flight — freshly queued ('pending') or streaming its
+ * partial answer in ('streaming'). Both keep the thread polling until the turn
+ * finishes.
+ */
+function isAgentReplyInFlight(
+  comment: ReviewThread['comments'][number],
+): boolean {
+  return (
+    comment.authorType === 'agent' &&
+    (comment.agentState === 'pending' || comment.agentState === 'streaming')
+  )
 }
