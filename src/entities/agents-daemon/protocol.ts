@@ -157,6 +157,7 @@ export type AgentsDaemonExecutionSessionStatus =
 
 export type AgentsDaemonExecutionStartInput = {
   automationMode?: boolean
+  callback?: { secret: string; url: string }
   continuationToken?: string | null
   effort?: string | null
   initialMessage: string
@@ -186,6 +187,10 @@ export type AgentsDaemonExecutionStartRequestBody = {
     branchName?: string | null
     ref?: string | null
     repository: string
+  }
+  callback?: {
+    secret: string
+    url: string
   }
 }
 
@@ -399,6 +404,9 @@ export function buildAgentsDaemonExecutionStartRequestBody(
             repository: input.workspace.repository,
           },
         }
+      : {}),
+    ...(input.callback
+      ? { callback: { secret: input.callback.secret, url: input.callback.url } }
       : {}),
     protocolVersion: EXECUTION_PROTOCOL_VERSION,
     providerId,

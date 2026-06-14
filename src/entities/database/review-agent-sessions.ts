@@ -81,6 +81,19 @@ export async function getReviewAgentSessionForPullRequest(
   return session ?? null
 }
 
+export async function getReviewAgentSessionByDaemonSessionId(
+  daemonSessionId: string,
+): Promise<ReviewAgentSessionRow | null> {
+  const db = getDb()
+  const [session] = await db
+    .select()
+    .from(reviewAgentSessions)
+    .where(eq(reviewAgentSessions.daemonSessionId, daemonSessionId))
+    .limit(1)
+
+  return session ?? null
+}
+
 export async function startReviewAgentSession(
   input: StartReviewAgentSessionInput,
 ): Promise<ReviewAgentSessionRow> {

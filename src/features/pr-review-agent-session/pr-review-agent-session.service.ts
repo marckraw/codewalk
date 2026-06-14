@@ -19,6 +19,7 @@ import {
   type ReviewAgentSessionRow,
 } from '@/entities/database'
 import { buildRepositoryUrlFromSnapshot } from '@/features/code-review-guide-generation'
+import { getReviewAgentCallbackConfig } from './pr-review-agent-callback.config'
 import {
   buildPullRequestReviewAgentInitialPrompt,
   buildPullRequestReviewAgentSessionId,
@@ -172,12 +173,17 @@ async function startRemoteReviewAgentSession(input: {
     repo: input.snapshot.repo,
   })
 
+  // When configured, the daemon POSTs this signed callback on turn completion,
+  // so the final reply persists even if no browser is polling.
+  const callback = getReviewAgentCallbackConfig()
+
   try {
     const started = await input.client.startExecutionSession({
       // Review sessions run unattended — codewalk has no tool-approval UI, and
       // the agent's fix flow needs to edit + commit. Approvals would hang the
       // turn forever. The push to the PR branch is the human gate (P7).
       automationMode: true,
+      ...(callback ? { callback } : {}),
       continuationToken: input.continuationToken,
       effort: input.config.config.defaultEffort,
       initialMessage: buildPullRequestReviewAgentInitialPrompt(
