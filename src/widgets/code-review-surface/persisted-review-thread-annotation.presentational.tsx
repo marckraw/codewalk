@@ -10,6 +10,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
+import { AnimatedStatus } from '@/shared/ui/animated-status'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { MarkdownText } from './markdown'
@@ -107,12 +108,18 @@ export function PersistedReviewThreadAnnotation({
                   </Badge>
                 ) : null}
                 {comment.agentState ? (
-                  <span className="font-normal">
-                    ·{' '}
-                    {comment.agentState === 'pending' &&
-                    annotation.agentActivity
-                      ? describeReviewAgentActivity(annotation.agentActivity)
-                      : comment.agentState}
+                  <span className="flex items-center gap-1 font-normal">
+                    ·
+                    <AnimatedStatus
+                      status={
+                        comment.agentState === 'pending' &&
+                        annotation.agentActivity
+                          ? describeReviewAgentActivity(
+                              annotation.agentActivity,
+                            )
+                          : comment.agentState
+                      }
+                    />
                   </span>
                 ) : null}
               </div>

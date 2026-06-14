@@ -37,6 +37,10 @@ Required source roots:
 
 Do not add long-term code under `src/components`, `src/hooks`, or `src/lib`.
 
+## UI
+
+Use `motion` (the framer-motion successor) for animation — reach for it over bespoke CSS keyframes whenever enter/exit, layout, gesture, or physics matters; the reusable `AnimatedStatus` (`src/shared/ui`) is the pattern for async-progress / "waiting on the system" states.
+
 ## File Naming
 
 Use these suffixes for new or migrated files:
