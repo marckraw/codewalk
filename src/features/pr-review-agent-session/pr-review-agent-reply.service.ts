@@ -458,6 +458,24 @@ export async function advancePullRequestReviewAgentReply(input: {
         : {}),
     })
     await persistSessionSnapshot(session.id, snapshot)
+    return refreshedThread(thread.id)
+  }
+
+  // Turn still running: stream the partial assistant text into the comment so
+  // the reply appears progressively across polls instead of all at once on
+  // completion. The daemon patches the assistant item per delta, so each
+  // snapshot carries the text produced so far.
+  if (!isIdle(snapshot)) {
+    const partial = extractAgentReplyAfterLastUserMessage(
+      parseAgentsDaemonConversationItems(snapshot.conversation),
+    )
+    if (partial && partial !== oldest.body) {
+      await updateReviewThreadComment({
+        agentState: 'streaming',
+        body: partial,
+        commentId: oldest.id,
+      })
+    }
   }
 
   return refreshedThread(thread.id)
@@ -567,7 +585,13 @@ async function refreshedThread(
 }
 
 function isPendingAgentComment(comment: ReviewThreadCommentRow): boolean {
-  return comment.authorType === 'agent' && comment.agentState === 'pending'
+  // "In flight" = not yet finalized: a freshly-queued turn ('pending') or one
+  // whose partial reply is streaming in ('streaming'). Both keep the poll loop
+  // running until the turn completes or errors.
+  return (
+    comment.authorType === 'agent' &&
+    (comment.agentState === 'pending' || comment.agentState === 'streaming')
+  )
 }
 
 function isIdle(snapshot: AgentsDaemonExecutionSessionSnapshot): boolean {

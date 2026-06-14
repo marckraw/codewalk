@@ -302,6 +302,44 @@ describe('review agent reply state machine', () => {
     )
   })
 
+  it('advance streams partial assistant text while the turn runs', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingSent]),
+    )
+    const client = makeClient([
+      daemonSnapshot({
+        conversation: [
+          {
+            actor: 'user',
+            id: 'u-1',
+            kind: 'message',
+            state: 'complete',
+            text: 'question',
+          },
+          {
+            actor: 'assistant',
+            id: 'a-1',
+            kind: 'message',
+            state: 'streaming',
+            text: 'It validates the',
+          },
+        ],
+        lastSeq: 9,
+        status: 'running',
+      }),
+    ])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentState: 'streaming',
+        body: 'It validates the',
+        commentId: 'comment-2',
+      }),
+    )
+  })
+
   it('advance keeps waiting when the seq has not moved past the claim', async () => {
     mockedGetReviewThread.mockResolvedValue(
       makeThread([questionComment, pendingSent]),

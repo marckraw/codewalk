@@ -114,7 +114,8 @@ export function PersistedReviewThreadAnnotation({
                     ·
                     <AnimatedStatus
                       status={
-                        comment.agentState === 'pending' &&
+                        (comment.agentState === 'pending' ||
+                          comment.agentState === 'streaming') &&
                         annotation.agentActivity
                           ? describeReviewAgentActivity(
                               annotation.agentActivity,
