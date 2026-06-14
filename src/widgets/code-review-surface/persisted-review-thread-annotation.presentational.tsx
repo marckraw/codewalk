@@ -73,6 +73,25 @@ export function PersistedReviewThreadAnnotation({
         </Button>
       </div>
       <ThreadExcerpt excerpt={thread.excerpt} />
+      {thread.extraAnchors && thread.extraAnchors.length > 0 ? (
+        <div className="border-b border-[var(--border)] px-3 py-2">
+          <p className="mb-1 text-[11px] font-medium text-[var(--muted)]">
+            Also referencing {thread.extraAnchors.length} selection
+            {thread.extraAnchors.length === 1 ? '' : 's'}:
+          </p>
+          <ul className="grid gap-1">
+            {thread.extraAnchors.map((anchor, index) => (
+              <li
+                className="truncate font-mono text-[11px] text-[var(--muted)]"
+                key={`${anchor.filePath}:${anchor.side}:${anchor.lineStart}-${anchor.lineEnd}:${index}`}
+              >
+                {anchor.filePath.split('/').pop() || anchor.filePath}:
+                {anchor.lineStart}-{anchor.lineEnd}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <ol className="divide-y divide-[var(--border)]">
         {thread.comments.map((comment) => {
           if (comment.commentKind === 'system') {

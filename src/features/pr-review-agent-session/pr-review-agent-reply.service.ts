@@ -525,6 +525,7 @@ async function claimAndSendQuestion(params: {
             })
           : buildReviewThreadAgentQuestionPrompt({
               anchor: thread,
+              additionalAnchors: thread.extraAnchors ?? undefined,
               history,
               question: latest ?? '',
             }),

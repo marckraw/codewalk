@@ -20,6 +20,7 @@ import {
   requestReviewThreadAgentReply,
   updateReviewThreadStatus,
   type ReviewThread,
+  type ReviewThreadAnchorRef,
 } from '@/entities/review-thread'
 import { FileRail } from './file-rail'
 import { GuideEmptyPane } from './guide-empty-pane'
@@ -28,6 +29,7 @@ import { GuideRail } from './guide-rail'
 import { GuideView } from './guide-view'
 import { ModeButton } from './mode-button'
 import { PierreDiffViewer } from './pierre-diff-viewer'
+import { PinnedDiscussionComposer } from './pinned-discussion-composer.presentational'
 import { PullRequestStatusBadge } from './pull-request-status-badge'
 import { ReviewThreadAnnotation } from './review-thread-annotation.presentational'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
@@ -109,6 +111,12 @@ export function ReviewWorkspace({
   const [draftBody, setDraftBody] = useState('')
   const [draftError, setDraftError] = useState<string | null>(null)
   const [isPostingDraft, setIsPostingDraft] = useState(false)
+  const [pinnedAnchors, setPinnedAnchors] = useState<ReviewThreadAnchorRef[]>(
+    [],
+  )
+  const [discussionBody, setDiscussionBody] = useState('')
+  const [discussionError, setDiscussionError] = useState<string | null>(null)
+  const [isPostingDiscussion, setIsPostingDiscussion] = useState(false)
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({})
   const [threadErrors, setThreadErrors] = useState<Record<string, string>>({})
   const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null)
@@ -753,6 +761,102 @@ export function ReviewWorkspace({
     workspace.snapshot.repo,
   ])
 
+  // Pin the current selection as a reference for a multi-anchor discussion,
+  // then clear it so the next range can be selected. Pins accumulate in the
+  // discussion composer.
+  const pinCurrentSelection = useCallback(() => {
+    if (!selectedFile || !selectedThreadAnchor.ok) {
+      if (!selectedThreadAnchor.ok) {
+        setDraftError(selectedThreadAnchor.error)
+      }
+      return
+    }
+
+    const anchor = selectedThreadAnchor.anchor
+    setPinnedAnchors((current) => [
+      ...current,
+      {
+        anchorCommitSha: workspace.snapshot.headSha,
+        excerpt: anchor.excerpt,
+        filePath: selectedFile,
+        lineEnd: anchor.lineEnd,
+        lineStart: anchor.lineStart,
+        side: anchor.side,
+      },
+    ])
+    clearSelectedReviewThreadDraft()
+  }, [
+    clearSelectedReviewThreadDraft,
+    selectedFile,
+    selectedThreadAnchor,
+    workspace.snapshot.headSha,
+  ])
+
+  const removePinnedAnchor = useCallback((index: number) => {
+    setPinnedAnchors((current) =>
+      current.filter((_, position) => position !== index),
+    )
+  }, [])
+
+  const clearPinnedDiscussion = useCallback(() => {
+    setPinnedAnchors([])
+    setDiscussionBody('')
+    setDiscussionError(null)
+  }, [])
+
+  // Create a discussion thread from the pinned selections: the first pin is the
+  // primary anchor, the rest ride along as extraAnchors, and the agent prompt
+  // includes every excerpt.
+  const submitPinnedDiscussion = useCallback(async () => {
+    if (pinnedAnchors.length === 0) {
+      setDiscussionError('Pin at least one selection first.')
+      return
+    }
+
+    const body = discussionBody.trim()
+    if (!body) {
+      setDiscussionError('Enter a question about the pinned selections.')
+      return
+    }
+
+    const [primary, ...extra] = pinnedAnchors
+    setDiscussionError(null)
+    setIsPostingDiscussion(true)
+
+    try {
+      const thread = await createReviewThread({
+        anchorCommitSha: primary.anchorCommitSha,
+        anchorSnapshotId: workspace.snapshot.id,
+        body,
+        excerpt: primary.excerpt,
+        extraAnchors: extra,
+        filePath: primary.filePath,
+        lineEnd: primary.lineEnd,
+        lineStart: primary.lineStart,
+        number: workspace.snapshot.number,
+        owner: workspace.snapshot.owner,
+        repo: workspace.snapshot.repo,
+        side: primary.side,
+      })
+      setReviewThreads((current) => [thread, ...current])
+      clearPinnedDiscussion()
+      void runAgentReplyForThread(thread.id)
+    } catch (error) {
+      setDiscussionError(reviewThreadErrorMessage(error))
+    } finally {
+      setIsPostingDiscussion(false)
+    }
+  }, [
+    clearPinnedDiscussion,
+    discussionBody,
+    pinnedAnchors,
+    runAgentReplyForThread,
+    workspace.snapshot.id,
+    workspace.snapshot.number,
+    workspace.snapshot.owner,
+    workspace.snapshot.repo,
+  ])
+
   const draftAnnotation = useMemo(
     () =>
       selectedFile && selectedThreadAnchor.ok
@@ -764,6 +868,7 @@ export function ReviewWorkspace({
             kind: 'draft' as const,
             onBodyChange: setDraftBody,
             onCancel: clearSelectedReviewThreadDraft,
+            onPinSelection: pinCurrentSelection,
             onSubmit: submitReviewThreadDraft,
           } satisfies Extract<ReviewThreadAnnotationData, { kind: 'draft' }>)
         : null,
@@ -772,6 +877,7 @@ export function ReviewWorkspace({
       draftBody,
       draftError,
       isPostingDraft,
+      pinCurrentSelection,
       selectedFile,
       selectedThreadAnchor,
       submitReviewThreadDraft,
@@ -917,6 +1023,19 @@ export function ReviewWorkspace({
           </Button>
         </div>
       </div>
+
+      {pinnedAnchors.length > 0 ? (
+        <PinnedDiscussionComposer
+          body={discussionBody}
+          error={discussionError}
+          isSubmitting={isPostingDiscussion}
+          onBodyChange={setDiscussionBody}
+          onClear={clearPinnedDiscussion}
+          onRemovePin={removePinnedAnchor}
+          onSubmit={submitPinnedDiscussion}
+          pins={pinnedAnchors}
+        />
+      ) : null}
 
       <div className="relative grid min-h-0 flex-1 grid-rows-[minmax(180px,280px)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-1">
         {selectedView === 'guide' ? (

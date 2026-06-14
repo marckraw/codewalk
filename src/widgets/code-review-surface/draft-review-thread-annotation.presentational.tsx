@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { MessageCircle, Send, X } from 'lucide-react'
+import { MessageCircle, Pin, Send, X } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
 import { ThreadExcerpt } from './thread-excerpt.presentational'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
@@ -58,6 +58,16 @@ export function DraftReviewThreadAnnotation({
             variant="secondary"
           >
             Cancel
+          </Button>
+          <Button
+            onClick={annotation.onPinSelection}
+            size="sm"
+            title="Pin this selection to ask about several together"
+            type="button"
+            variant="ghost"
+          >
+            <Pin aria-hidden="true" className="size-3.5" />
+            Pin selection
           </Button>
           <Button
             disabled={annotation.isSubmitting || !annotation.body.trim()}

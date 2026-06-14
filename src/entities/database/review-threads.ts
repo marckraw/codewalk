@@ -3,6 +3,7 @@ import 'server-only'
 import { asc, and, desc, eq, inArray, isNull } from 'drizzle-orm'
 import type {
   ReviewThreadAgentState,
+  ReviewThreadAnchorRef,
   ReviewThreadCommentAuthorType,
   ReviewThreadCommentKind,
   ReviewThreadCommentRow,
@@ -32,6 +33,7 @@ export type ReviewThreadInsert = {
   lineStart: number
   lineEnd: number
   excerpt: string
+  extraAnchors?: ReviewThreadAnchorRef[] | null
   createdByUserId: string
 }
 
@@ -111,6 +113,7 @@ export function buildReviewThreadRow(input: ReviewThreadInsert) {
     lineStart: Math.min(input.lineStart, input.lineEnd),
     lineEnd: Math.max(input.lineStart, input.lineEnd),
     excerpt: input.excerpt,
+    extraAnchors: input.extraAnchors ?? null,
     createdByUserId: input.createdByUserId,
   }
 }

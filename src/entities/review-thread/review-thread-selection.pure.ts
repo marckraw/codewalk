@@ -1,11 +1,64 @@
 import type { SelectedLineRange, SelectionSide } from '@pierre/diffs'
-import type { ReviewThreadDiffSide } from './review-thread.types'
+import type {
+  ReviewThreadAnchorRef,
+  ReviewThreadDiffSide,
+} from './review-thread.types'
 
 export type ReviewThreadSelectionAnchor = {
   excerpt: string
   lineEnd: number
   lineStart: number
   side: ReviewThreadDiffSide
+}
+
+/**
+ * Validates untrusted multi-anchor refs (from the create-thread request body),
+ * dropping malformed entries and normalizing line ranges. Lenient: a bad ref
+ * is skipped rather than failing the whole request.
+ */
+export function parseReviewThreadExtraAnchors(
+  value: unknown,
+): ReviewThreadAnchorRef[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  const anchors: ReviewThreadAnchorRef[] = []
+
+  for (const item of value) {
+    if (typeof item !== 'object' || item === null) {
+      continue
+    }
+
+    const anchor = item as Record<string, unknown>
+
+    if (
+      typeof anchor.filePath !== 'string' ||
+      !anchor.filePath.trim() ||
+      (anchor.side !== 'old' && anchor.side !== 'new') ||
+      !Number.isInteger(anchor.lineStart) ||
+      !Number.isInteger(anchor.lineEnd) ||
+      typeof anchor.excerpt !== 'string' ||
+      typeof anchor.anchorCommitSha !== 'string' ||
+      !anchor.anchorCommitSha.trim()
+    ) {
+      continue
+    }
+
+    const lineStart = anchor.lineStart as number
+    const lineEnd = anchor.lineEnd as number
+
+    anchors.push({
+      anchorCommitSha: anchor.anchorCommitSha,
+      excerpt: anchor.excerpt,
+      filePath: anchor.filePath,
+      lineEnd: Math.max(lineStart, lineEnd),
+      lineStart: Math.min(lineStart, lineEnd),
+      side: anchor.side,
+    })
+  }
+
+  return anchors
 }
 
 export type BuildReviewThreadSelectionAnchorResult =

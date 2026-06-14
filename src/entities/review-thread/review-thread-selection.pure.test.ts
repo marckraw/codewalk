@@ -4,9 +4,69 @@ import {
   extendReviewThreadSelection,
   extractDiffExcerpt,
   normalizeReviewThreadSelection,
+  parseReviewThreadExtraAnchors,
   pierreSideFromReviewThreadDiffSide,
   reviewThreadDiffSideFromPierreSide,
 } from './review-thread-selection.pure'
+
+describe('parseReviewThreadExtraAnchors', () => {
+  it('keeps valid anchors and normalizes line ranges', () => {
+    expect(
+      parseReviewThreadExtraAnchors([
+        {
+          anchorCommitSha: 'sha1',
+          excerpt: 'const a = 1',
+          filePath: 'src/a.ts',
+          lineEnd: 5,
+          lineStart: 9,
+          side: 'new',
+        },
+      ]),
+    ).toEqual([
+      {
+        anchorCommitSha: 'sha1',
+        excerpt: 'const a = 1',
+        filePath: 'src/a.ts',
+        lineEnd: 9,
+        lineStart: 5,
+        side: 'new',
+      },
+    ])
+  })
+
+  it('drops malformed entries and non-arrays', () => {
+    expect(parseReviewThreadExtraAnchors(null)).toEqual([])
+    expect(
+      parseReviewThreadExtraAnchors([
+        {
+          filePath: '',
+          side: 'new',
+          lineStart: 1,
+          lineEnd: 2,
+          excerpt: 'x',
+          anchorCommitSha: 's',
+        },
+        {
+          filePath: 'a.ts',
+          side: 'sideways',
+          lineStart: 1,
+          lineEnd: 2,
+          excerpt: 'x',
+          anchorCommitSha: 's',
+        },
+        {
+          filePath: 'a.ts',
+          side: 'new',
+          lineStart: 1.5,
+          lineEnd: 2,
+          excerpt: 'x',
+          anchorCommitSha: 's',
+        },
+        'not-an-object',
+      ]),
+    ).toEqual([])
+  })
+})
 
 describe('review thread selection helpers', () => {
   it('normalizes a Pierre additions selection into a new-side anchor', () => {
