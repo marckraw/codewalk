@@ -8,13 +8,10 @@ describe('AnimatedStatus', () => {
     expect(screen.getByText('thinking')).toBeInTheDocument()
   })
 
-  it('swaps to the new status when it changes', () => {
-    const { rerender, container } = render(<AnimatedStatus status="thinking" />)
+  it('shows the new status when it changes', () => {
+    const { rerender } = render(<AnimatedStatus status="thinking" />)
     rerender(<AnimatedStatus status="writing the answer" />)
-    // Keyed remount: exactly one status node, showing the latest value.
+    // The incoming status renders; AnimatePresence animates the old one out.
     expect(screen.getByText('writing the answer')).toBeInTheDocument()
-    expect(container.querySelectorAll('.animate-status-roll-in')).toHaveLength(
-      1,
-    )
   })
 })
