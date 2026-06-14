@@ -114,6 +114,7 @@ describe('AgentsDaemonClient', () => {
 
     await expect(
       client.startExecutionSession({
+        automationMode: true,
         initialMessage: 'Ready?',
         model: 'gpt-5.5',
         providerId: 'codex',
@@ -132,6 +133,7 @@ describe('AgentsDaemonClient', () => {
     )
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
       config: {
+        automationMode: true,
         initialMessage: 'Ready?',
         sessionId: 'session-1',
       },

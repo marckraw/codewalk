@@ -156,6 +156,7 @@ export type AgentsDaemonExecutionSessionStatus =
   | 'failed'
 
 export type AgentsDaemonExecutionStartInput = {
+  automationMode?: boolean
   continuationToken?: string | null
   effort?: string | null
   initialMessage: string
@@ -173,6 +174,7 @@ export type AgentsDaemonExecutionStartRequestBody = {
   protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
   providerId: string
   config: {
+    automationMode?: boolean
     continuationToken: string | null
     effort: string | null
     initialMessage: string
@@ -379,6 +381,7 @@ export function buildAgentsDaemonExecutionStartRequestBody(
 
   return {
     config: {
+      ...(input.automationMode ? { automationMode: true } : {}),
       continuationToken: input.continuationToken?.trim() || null,
       effort: input.effort?.trim() || null,
       initialMessage,
