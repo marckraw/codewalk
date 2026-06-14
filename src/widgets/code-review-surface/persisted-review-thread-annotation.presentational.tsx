@@ -12,6 +12,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import { MarkdownText } from './markdown'
 import { describeReviewAgentActivity } from './review-agent-activity.pure'
 import { ThreadExcerpt } from './thread-excerpt.presentational'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
@@ -116,9 +117,10 @@ export function PersistedReviewThreadAnnotation({
                 ) : null}
               </div>
               {comment.body ? (
-                <p className="whitespace-pre-wrap leading-5 text-[var(--foreground)]">
-                  {comment.body}
-                </p>
+                <MarkdownText
+                  className="leading-5 text-[var(--foreground)]"
+                  content={comment.body}
+                />
               ) : null}
               {isFixProposal && comment.fixState === 'proposed' ? (
                 <div className="flex justify-end gap-2 pt-1">
