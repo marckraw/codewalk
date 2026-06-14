@@ -10,7 +10,9 @@ export interface ReviewDeepLink {
 export function parseReviewView(
   value: string | null | undefined,
 ): ReviewMode | null {
-  return value === 'guide' || value === 'diff' ? value : null
+  return value === 'guide' || value === 'diff' || value === 'discussions'
+    ? value
+    : null
 }
 
 function firstParam(

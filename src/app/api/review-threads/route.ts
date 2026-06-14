@@ -64,6 +64,7 @@ export async function POST(request: Request) {
     lineEnd?: unknown
     excerpt?: unknown
     extraAnchors?: unknown
+    kind?: unknown
     body?: unknown
   }
 
@@ -122,6 +123,7 @@ export async function POST(request: Request) {
     lineEnd: input.lineEnd as number,
     excerpt: input.excerpt,
     extraAnchors: parseReviewThreadExtraAnchors(input.extraAnchors),
+    kind: input.kind === 'discussion' ? 'discussion' : 'inline',
     createdByUserId: user.id,
     body: input.body,
   })

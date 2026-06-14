@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { DiffLineAnnotation, SelectedLineRange } from '@pierre/diffs'
-import { GitCompareArrows, GitPullRequestArrow, ListTree } from 'lucide-react'
+import {
+  GitCompareArrows,
+  GitPullRequestArrow,
+  ListTree,
+  MessagesSquare,
+} from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import {
@@ -22,6 +27,7 @@ import {
   type ReviewThread,
   type ReviewThreadAnchorRef,
 } from '@/entities/review-thread'
+import { DiscussionsView } from './discussions-view.presentational'
 import { FileRail } from './file-rail'
 import { GuideEmptyPane } from './guide-empty-pane'
 import { GuidePreparingPane } from './guide-preparing-pane'
@@ -185,17 +191,27 @@ export function ReviewWorkspace({
       }),
     [selectedDiff, selectedLines],
   )
+  // Discussion-kind threads are whole-PR conversations shown in the Discussions
+  // tab — they must not render as inline diff annotations.
+  const inlineThreads = useMemo(
+    () => reviewThreads.filter((thread) => thread.kind !== 'discussion'),
+    [reviewThreads],
+  )
+  const discussionThreads = useMemo(
+    () => reviewThreads.filter((thread) => thread.kind === 'discussion'),
+    [reviewThreads],
+  )
   const visibleThreads = useMemo(
     () =>
       selectedFile
-        ? reviewThreads.filter((thread) => thread.filePath === selectedFile)
+        ? inlineThreads.filter((thread) => thread.filePath === selectedFile)
         : [],
-    [reviewThreads, selectedFile],
+    [inlineThreads, selectedFile],
   )
   const threadsByFile = useMemo(() => {
     const map = new Map<string, ReviewThread[]>()
 
-    for (const thread of reviewThreads) {
+    for (const thread of inlineThreads) {
       const list = map.get(thread.filePath)
       if (list) {
         list.push(thread)
@@ -205,7 +221,7 @@ export function ReviewWorkspace({
     }
 
     return map
-  }, [reviewThreads])
+  }, [inlineThreads])
 
   /**
    * Single selection across both views: selecting lines in any file (diff
@@ -459,6 +475,21 @@ export function ReviewWorkspace({
     },
     [clearSelectedReviewThreadDraft],
   )
+
+  // Clicking a reference chip in a Discussions card opens that selection in the
+  // diff view so the reviewer can read the code the conversation is about.
+  const jumpToAnchor = useCallback((anchor: ReviewThreadAnchorRef) => {
+    const side = pierreSideFromReviewThreadDiffSide(anchor.side)
+    selectionFileRef.current = anchor.filePath
+    setSelectedView('diff')
+    setSelectedFile(anchor.filePath)
+    setSelectedLines({
+      end: anchor.lineEnd,
+      endSide: side,
+      side,
+      start: anchor.lineStart,
+    })
+  }, [])
 
   const handleStatusFilterChange = useCallback(
     (nextFilter: string) => {
@@ -831,6 +862,7 @@ export function ReviewWorkspace({
         excerpt: primary.excerpt,
         extraAnchors: extra,
         filePath: primary.filePath,
+        kind: 'discussion',
         lineEnd: primary.lineEnd,
         lineStart: primary.lineStart,
         number: workspace.snapshot.number,
@@ -840,6 +872,9 @@ export function ReviewWorkspace({
       })
       setReviewThreads((current) => [thread, ...current])
       clearPinnedDiscussion()
+      // Land in the Discussions tab so the new conversation is where the user
+      // is looking, not buried at its anchor in the diff.
+      setSelectedView('discussions')
       void runAgentReplyForThread(thread.id)
     } catch (error) {
       setDiscussionError(reviewThreadErrorMessage(error))
@@ -935,6 +970,16 @@ export function ReviewWorkspace({
       }),
     [draftAnnotation, selectedFile, threadAnnotationHandlers, threadsByFile],
   )
+  const discussionAnnotations = useMemo(
+    () =>
+      discussionThreads.map((thread) =>
+        buildReviewThreadMetadata(thread, threadAnnotationHandlers, {
+          onJumpToAnchor: jumpToAnchor,
+          variant: 'discussion',
+        }),
+      ),
+    [discussionThreads, jumpToAnchor, threadAnnotationHandlers],
+  )
   const getGuideFileSelectedLines = useCallback(
     (filePath: string) => (selectedFile === filePath ? selectedLines : null),
     [selectedFile, selectedLines],
@@ -1001,6 +1046,16 @@ export function ReviewWorkspace({
               label="Diff"
               onClick={() => setSelectedView('diff')}
             />
+            <ModeButton
+              active={selectedView === 'discussions'}
+              icon={<MessagesSquare className="size-3.5" />}
+              label={
+                discussionThreads.length > 0
+                  ? `Discussions (${discussionThreads.length})`
+                  : 'Discussions'
+              }
+              onClick={() => setSelectedView('discussions')}
+            />
           </div>
           <Badge tone="success">{workspace.files.length} files</Badge>
           {workspace.guide ? (
@@ -1037,75 +1092,82 @@ export function ReviewWorkspace({
         />
       ) : null}
 
-      <div className="relative grid min-h-0 flex-1 grid-rows-[minmax(180px,280px)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-1">
-        {selectedView === 'guide' ? (
-          <>
-            <GuideRail
-              activeSectionId={effectiveActiveGuideSectionId}
-              autoGenerate={autoGenerate}
-              onGenerationStart={markGenerationStarted}
-              onSelectSection={handleSelectGuideSection}
-              workspace={workspace}
-            />
-            {workspace.state === 'preparing' ? (
-              <GuidePreparingPane />
-            ) : workspace.guide ? (
-              <GuideView
-                getFileAnnotations={getGuideFileAnnotations}
-                getFileDiff={(filePath) => diffByPath.get(filePath) ?? ''}
-                getFileSelectedLines={getGuideFileSelectedLines}
-                guide={workspace.guide}
-                isFileLoading={() => false}
-                onFileSelectedLinesChange={handleFileSelectedLinesChange}
-                onSelectFile={handleSelectGuideFile}
-                renderAnnotation={(annotation) => (
-                  <ReviewThreadAnnotation annotation={annotation.metadata} />
-                )}
-                renderFileRef={renderGuideFileRef}
-                renderSectionRef={renderGuideSectionRef}
+      {selectedView === 'discussions' ? (
+        <DiscussionsView
+          annotations={discussionAnnotations}
+          onBrowseDiff={() => setSelectedView('diff')}
+        />
+      ) : (
+        <div className="relative grid min-h-0 flex-1 grid-rows-[minmax(180px,280px)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-1">
+          {selectedView === 'guide' ? (
+            <>
+              <GuideRail
+                activeSectionId={effectiveActiveGuideSectionId}
+                autoGenerate={autoGenerate}
+                onGenerationStart={markGenerationStarted}
+                onSelectSection={handleSelectGuideSection}
+                workspace={workspace}
               />
-            ) : (
-              <GuideEmptyPane workspace={workspace} />
-            )}
-          </>
-        ) : (
-          <>
-            <FileRail
-              files={workspace.files}
-              onSelectFile={handleSelectFile}
-              onStatusFilterChange={handleStatusFilterChange}
-              selectedFile={selectedVisibleFile}
-              statusCounts={statusCounts}
-              statusFilter={statusFilter}
-              visibleFiles={visibleFiles}
-            />
-            <main className="min-w-0 overflow-hidden">
-              {reviewThreadLoadError ? (
-                <div className="border-b border-[var(--border)] bg-[var(--panel-subtle)] px-3 py-2 text-xs text-[var(--danger)]">
-                  {reviewThreadLoadError}
-                </div>
-              ) : null}
-              <PierreDiffViewer
-                diff={selectedDiff}
-                file={selectedFile}
-                fileStatus={selectedFileStatus}
-                lineAnnotations={reviewThreadAnnotations}
-                onSelectedLinesChange={
-                  selectedFile
-                    ? (range) =>
-                        handleFileSelectedLinesChange(selectedFile, range)
-                    : undefined
-                }
-                renderAnnotation={(annotation) => (
-                  <ReviewThreadAnnotation annotation={annotation.metadata} />
-                )}
-                selectedLines={selectedLines}
-                title="Pull request diff"
+              {workspace.state === 'preparing' ? (
+                <GuidePreparingPane />
+              ) : workspace.guide ? (
+                <GuideView
+                  getFileAnnotations={getGuideFileAnnotations}
+                  getFileDiff={(filePath) => diffByPath.get(filePath) ?? ''}
+                  getFileSelectedLines={getGuideFileSelectedLines}
+                  guide={workspace.guide}
+                  isFileLoading={() => false}
+                  onFileSelectedLinesChange={handleFileSelectedLinesChange}
+                  onSelectFile={handleSelectGuideFile}
+                  renderAnnotation={(annotation) => (
+                    <ReviewThreadAnnotation annotation={annotation.metadata} />
+                  )}
+                  renderFileRef={renderGuideFileRef}
+                  renderSectionRef={renderGuideSectionRef}
+                />
+              ) : (
+                <GuideEmptyPane workspace={workspace} />
+              )}
+            </>
+          ) : (
+            <>
+              <FileRail
+                files={workspace.files}
+                onSelectFile={handleSelectFile}
+                onStatusFilterChange={handleStatusFilterChange}
+                selectedFile={selectedVisibleFile}
+                statusCounts={statusCounts}
+                statusFilter={statusFilter}
+                visibleFiles={visibleFiles}
               />
-            </main>
-          </>
-        )}
-      </div>
+              <main className="min-w-0 overflow-hidden">
+                {reviewThreadLoadError ? (
+                  <div className="border-b border-[var(--border)] bg-[var(--panel-subtle)] px-3 py-2 text-xs text-[var(--danger)]">
+                    {reviewThreadLoadError}
+                  </div>
+                ) : null}
+                <PierreDiffViewer
+                  diff={selectedDiff}
+                  file={selectedFile}
+                  fileStatus={selectedFileStatus}
+                  lineAnnotations={reviewThreadAnnotations}
+                  onSelectedLinesChange={
+                    selectedFile
+                      ? (range) =>
+                          handleFileSelectedLinesChange(selectedFile, range)
+                      : undefined
+                  }
+                  renderAnnotation={(annotation) => (
+                    <ReviewThreadAnnotation annotation={annotation.metadata} />
+                  )}
+                  selectedLines={selectedLines}
+                  title="Pull request diff"
+                />
+              </main>
+            </>
+          )}
+        </div>
+      )}
     </section>
   )
 }
@@ -1120,10 +1182,9 @@ function countFilesByStatus(files: ReviewFile[]): Record<string, number> {
   return counts
 }
 
-function buildReviewThreadAnnotations(input: {
+interface ReviewThreadMetadataInput {
   agentActivity: string | null
   askingFixThreadId: string | null
-  draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
   fixAction: { commentId: string; kind: 'push' | 'discard' } | null
   onApproveFix: (threadId: string, commentId: string) => void
   onAskAgent: (threadId: string) => void
@@ -1135,39 +1196,61 @@ function buildReviewThreadAnnotations(input: {
   replyingThreadId: string | null
   replyBodies: Record<string, string>
   threadErrors: Record<string, string>
-  threads: ReviewThread[]
   updatingStatusThreadId: string | null
-}): DiffLineAnnotation<ReviewThreadAnnotationData>[] {
-  const annotations: DiffLineAnnotation<ReviewThreadAnnotationData>[] =
-    input.threads.map((thread) => {
-      const hasPendingAgentComment = thread.comments.some(isAgentReplyInFlight)
+}
 
-      return {
-        lineNumber: thread.lineStart,
-        metadata: {
-          agentActivity: hasPendingAgentComment ? input.agentActivity : null,
-          error: input.threadErrors[thread.id] || null,
-          fixActionCommentId: input.fixAction?.commentId ?? null,
-          isAskingAgent: hasPendingAgentComment,
-          isAskingFix: input.askingFixThreadId === thread.id,
-          isDiscardingFix: input.fixAction?.kind === 'discard',
-          isPushingFix: input.fixAction?.kind === 'push',
-          isReplying: input.replyingThreadId === thread.id,
-          isUpdatingStatus: input.updatingStatusThreadId === thread.id,
-          kind: 'thread',
-          replyBody: input.replyBodies[thread.id] ?? '',
-          thread,
-          onApproveFix: (commentId) => input.onApproveFix(thread.id, commentId),
-          onAskAgent: () => input.onAskAgent(thread.id),
-          onAskFix: () => input.onAskFix(thread.id),
-          onDiscardFix: (commentId) => input.onDiscardFix(thread.id, commentId),
-          onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
-          onReplySubmit: () => input.onReplySubmit(thread.id),
-          onStatusChange: (status) => input.onStatusChange(thread.id, status),
-        },
-        side: pierreSideFromReviewThreadDiffSide(thread.side),
-      }
-    })
+/**
+ * Build the thread-annotation view model for a single thread. Shared by the
+ * inline diff annotations and the Discussions surface; `extras` switches the
+ * card to its discussion presentation (reference chips + jump-to-anchor).
+ */
+function buildReviewThreadMetadata(
+  thread: ReviewThread,
+  input: ReviewThreadMetadataInput,
+  extras?: {
+    onJumpToAnchor?: (anchor: ReviewThreadAnchorRef) => void
+    variant?: 'inline' | 'discussion'
+  },
+): Extract<ReviewThreadAnnotationData, { kind: 'thread' }> {
+  const hasPendingAgentComment = thread.comments.some(isAgentReplyInFlight)
+
+  return {
+    agentActivity: hasPendingAgentComment ? input.agentActivity : null,
+    error: input.threadErrors[thread.id] || null,
+    fixActionCommentId: input.fixAction?.commentId ?? null,
+    isAskingAgent: hasPendingAgentComment,
+    isAskingFix: input.askingFixThreadId === thread.id,
+    isDiscardingFix: input.fixAction?.kind === 'discard',
+    isPushingFix: input.fixAction?.kind === 'push',
+    isReplying: input.replyingThreadId === thread.id,
+    isUpdatingStatus: input.updatingStatusThreadId === thread.id,
+    kind: 'thread',
+    replyBody: input.replyBodies[thread.id] ?? '',
+    thread,
+    onApproveFix: (commentId) => input.onApproveFix(thread.id, commentId),
+    onAskAgent: () => input.onAskAgent(thread.id),
+    onAskFix: () => input.onAskFix(thread.id),
+    onDiscardFix: (commentId) => input.onDiscardFix(thread.id, commentId),
+    onJumpToAnchor: extras?.onJumpToAnchor,
+    onReplyBodyChange: (body) => input.onReplyBodyChange(thread.id, body),
+    onReplySubmit: () => input.onReplySubmit(thread.id),
+    onStatusChange: (status) => input.onStatusChange(thread.id, status),
+    variant: extras?.variant ?? 'inline',
+  }
+}
+
+function buildReviewThreadAnnotations(
+  input: ReviewThreadMetadataInput & {
+    draft: Extract<ReviewThreadAnnotationData, { kind: 'draft' }> | null
+    threads: ReviewThread[]
+  },
+): DiffLineAnnotation<ReviewThreadAnnotationData>[] {
+  const annotations: DiffLineAnnotation<ReviewThreadAnnotationData>[] =
+    input.threads.map((thread) => ({
+      lineNumber: thread.lineStart,
+      metadata: buildReviewThreadMetadata(thread, input),
+      side: pierreSideFromReviewThreadDiffSide(thread.side),
+    }))
 
   if (input.draft) {
     annotations.push({

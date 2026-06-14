@@ -9,6 +9,7 @@ import type {
   ReviewThreadCommentRow,
   ReviewThreadDiffSide,
   ReviewThreadFixState,
+  ReviewThreadKind,
   ReviewThreadRow,
 } from './schema'
 import { getDb } from './client'
@@ -34,6 +35,7 @@ export type ReviewThreadInsert = {
   lineEnd: number
   excerpt: string
   extraAnchors?: ReviewThreadAnchorRef[] | null
+  kind?: ReviewThreadKind
   createdByUserId: string
 }
 
@@ -114,6 +116,7 @@ export function buildReviewThreadRow(input: ReviewThreadInsert) {
     lineEnd: Math.max(input.lineStart, input.lineEnd),
     excerpt: input.excerpt,
     extraAnchors: input.extraAnchors ?? null,
+    kind: input.kind ?? 'inline',
     createdByUserId: input.createdByUserId,
   }
 }

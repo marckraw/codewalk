@@ -34,6 +34,7 @@ describe('buildReviewThreadRow', () => {
       lineEnd: 14,
       excerpt: 'const x = 1',
       extraAnchors: null,
+      kind: 'inline',
       createdByUserId: 'user-1',
     })
   })

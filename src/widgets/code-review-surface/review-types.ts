@@ -1,6 +1,6 @@
 import type { ReviewWorkspaceData } from '@/entities/database'
 
-export type ReviewMode = 'guide' | 'diff'
+export type ReviewMode = 'guide' | 'diff' | 'discussions'
 export type ReviewWorkspace = ReviewWorkspaceData
 export type ReviewFile = ReviewWorkspaceData['files'][number]
 export type ReviewGuide = NonNullable<ReviewWorkspaceData['guide']>
