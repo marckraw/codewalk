@@ -34,7 +34,7 @@ export function PersistedReviewThreadAnnotation({
   return (
     <article
       aria-label={`Review thread on ${describeThreadAnchor(thread)}`}
-      className="my-2 mr-3 w-[min(42rem,calc(100vw-7rem))] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] text-xs shadow-sm"
+      className="my-2 mr-3 min-w-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] text-xs shadow-sm"
     >
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -91,7 +91,7 @@ export function PersistedReviewThreadAnnotation({
           const isActing = annotation.fixActionCommentId === comment.id
 
           return (
-            <li className="grid gap-1 px-3 py-2" key={comment.id}>
+            <li className="grid min-w-0 gap-1 px-3 py-2" key={comment.id}>
               <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--muted)]">
                 {comment.authorType === 'agent' ? (
                   <Bot aria-hidden="true" className="size-3.5" />
@@ -127,7 +127,7 @@ export function PersistedReviewThreadAnnotation({
               </div>
               {comment.body ? (
                 <MarkdownText
-                  className="break-words leading-5 text-[var(--foreground)]"
+                  className="min-w-0 break-words leading-5 text-[var(--foreground)]"
                   content={comment.body}
                 />
               ) : null}
