@@ -14,6 +14,7 @@ export type ReviewThreadComment = {
   threadId: string
   authorType: ReviewThreadCommentAuthorType
   authorUserId: string | null
+  authorName?: string | null
   body: string
   agentState: ReviewThreadAgentState | null
   commentKind: ReviewThreadCommentKind

@@ -34,7 +34,7 @@ export function PersistedReviewThreadAnnotation({
   return (
     <article
       aria-label={`Review thread on ${describeThreadAnchor(thread)}`}
-      className="my-2 mr-3 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] text-xs shadow-sm"
+      className="my-2 mr-3 w-[min(42rem,calc(100vw-7rem))] overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] text-xs shadow-sm"
     >
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -99,7 +99,9 @@ export function PersistedReviewThreadAnnotation({
                   <MessageCircle aria-hidden="true" className="size-3.5" />
                 )}
                 <span>
-                  {comment.authorType === 'agent' ? 'Agent' : 'Reviewer'}
+                  {comment.authorType === 'agent'
+                    ? 'Agent'
+                    : (comment.authorName ?? 'Reviewer')}
                 </span>
                 {isFixProposal ? (
                   <Badge className="h-5 gap-1 px-1.5" tone="default">
@@ -125,7 +127,7 @@ export function PersistedReviewThreadAnnotation({
               </div>
               {comment.body ? (
                 <MarkdownText
-                  className="leading-5 text-[var(--foreground)]"
+                  className="break-words leading-5 text-[var(--foreground)]"
                   content={comment.body}
                 />
               ) : null}
