@@ -1,5 +1,6 @@
 import type {
   ReviewThread,
+  ReviewThreadAnchorRef,
   ReviewThreadSelectionAnchor,
 } from '@/entities/review-thread'
 
@@ -35,6 +36,12 @@ export type ReviewThreadAnnotationData =
       onReplyBodyChange: (body: string) => void
       onReplySubmit: () => void
       onStatusChange: (status: 'open' | 'resolved') => void
+      // Discussion cards (variant 'discussion') jump to a referenced selection
+      // in the diff when a chip is clicked.
+      onJumpToAnchor?: (anchor: ReviewThreadAnchorRef) => void
       replyBody: string
       thread: ReviewThread
+      // 'inline' (default) renders as a diff annotation anchored to a line;
+      // 'discussion' renders in the Discussions surface with reference chips.
+      variant?: 'inline' | 'discussion'
     }

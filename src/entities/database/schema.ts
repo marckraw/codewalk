@@ -510,6 +510,11 @@ export const reviewThreadDiffSide = pgEnum('review_thread_diff_side', [
   'new',
 ])
 
+export const reviewThreadKind = pgEnum('review_thread_kind', [
+  'inline',
+  'discussion',
+])
+
 export const reviewThreadCommentAuthorType = pgEnum(
   'review_thread_comment_author_type',
   ['user', 'agent'],
@@ -571,6 +576,10 @@ export const reviewThreads = pgTable(
     // threads; the agent prompt includes every excerpt.
     extraAnchors: jsonb('extra_anchors').$type<ReviewThreadAnchorRef[]>(),
     status: reviewThreadStatus('status').default('open').notNull(),
+    // P6 discussions: 'inline' threads anchor to a diff line and render in the
+    // diff; 'discussion' threads are whole-PR conversations that live in the
+    // Discussions surface and reference one or more pinned selections.
+    kind: reviewThreadKind('kind').default('inline').notNull(),
     createdByUserId: uuid('created_by_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
@@ -675,6 +684,7 @@ export const reviewAgentSessions = pgTable(
 )
 
 export type ReviewThreadStatus = 'open' | 'resolved' | 'outdated'
+export type ReviewThreadKind = 'inline' | 'discussion'
 export type ReviewThreadDiffSide = 'old' | 'new'
 /** An additional selection a multi-anchor discussion thread references. */
 export type ReviewThreadAnchorRef = {

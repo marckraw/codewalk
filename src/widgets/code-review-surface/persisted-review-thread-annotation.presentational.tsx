@@ -5,6 +5,7 @@ import {
   CheckCircle2,
   GitCommitHorizontal,
   MessageCircle,
+  MessagesSquare,
   RotateCcw,
   Send,
   Wrench,
@@ -25,6 +26,21 @@ export function PersistedReviewThreadAnnotation({
   annotation: Extract<ReviewThreadAnnotationData, { kind: 'thread' }>
 }) {
   const { thread } = annotation
+  const isDiscussion = annotation.variant === 'discussion'
+  // A discussion references its primary anchor plus every pinned selection.
+  const referenceAnchors = isDiscussion
+    ? [
+        {
+          anchorCommitSha: thread.anchorCommitSha,
+          excerpt: thread.excerpt,
+          filePath: thread.filePath,
+          lineEnd: thread.lineEnd,
+          lineStart: thread.lineStart,
+          side: thread.side,
+        },
+        ...(thread.extraAnchors ?? []),
+      ]
+    : []
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -33,14 +49,30 @@ export function PersistedReviewThreadAnnotation({
 
   return (
     <article
-      aria-label={`Review thread on ${describeThreadAnchor(thread)}`}
+      aria-label={
+        isDiscussion
+          ? 'Discussion'
+          : `Review thread on ${describeThreadAnchor(thread)}`
+      }
       className="my-2 mr-3 min-w-0 overflow-hidden rounded-md border border-[var(--border)] bg-[var(--panel)] text-xs shadow-sm"
     >
       <div className="flex items-center justify-between gap-2 border-b border-[var(--border)] px-3 py-2">
         <div className="flex min-w-0 items-center gap-2">
-          <MessageCircle aria-hidden="true" className="size-3.5 text-sky-500" />
+          {isDiscussion ? (
+            <MessagesSquare
+              aria-hidden="true"
+              className="size-3.5 text-sky-500"
+            />
+          ) : (
+            <MessageCircle
+              aria-hidden="true"
+              className="size-3.5 text-sky-500"
+            />
+          )}
           <p className="truncate font-medium">
-            Thread on {describeThreadAnchor(thread)}
+            {isDiscussion
+              ? 'Discussion'
+              : `Thread on ${describeThreadAnchor(thread)}`}
           </p>
           {thread.status === 'resolved' ? (
             <Badge className="h-5 px-1.5" tone="success">
@@ -72,26 +104,56 @@ export function PersistedReviewThreadAnnotation({
           {thread.status === 'resolved' ? 'Reopen' : 'Resolve'}
         </Button>
       </div>
-      <ThreadExcerpt excerpt={thread.excerpt} />
-      {thread.extraAnchors && thread.extraAnchors.length > 0 ? (
-        <div className="border-b border-[var(--border)] px-3 py-2">
-          <p className="mb-1 text-[11px] font-medium text-[var(--muted)]">
-            Also referencing {thread.extraAnchors.length} selection
-            {thread.extraAnchors.length === 1 ? '' : 's'}:
+      {isDiscussion ? (
+        <div className="grid gap-1 border-b border-[var(--border)] px-3 py-2">
+          <p className="text-[11px] font-medium text-[var(--muted)]">
+            References {referenceAnchors.length} selection
+            {referenceAnchors.length === 1 ? '' : 's'}:
           </p>
-          <ul className="grid gap-1">
-            {thread.extraAnchors.map((anchor, index) => (
+          <ul className="flex flex-wrap gap-1.5">
+            {referenceAnchors.map((anchor, index) => (
               <li
-                className="truncate font-mono text-[11px] text-[var(--muted)]"
                 key={`${anchor.filePath}:${anchor.side}:${anchor.lineStart}-${anchor.lineEnd}:${index}`}
               >
-                {anchor.filePath.split('/').pop() || anchor.filePath}:
-                {anchor.lineStart}-{anchor.lineEnd}
+                <Button
+                  className="h-auto gap-1 px-1.5 py-0.5 font-mono text-[11px]"
+                  onClick={() => annotation.onJumpToAnchor?.(anchor)}
+                  size="sm"
+                  title={`${anchor.filePath}:${anchor.lineStart}-${anchor.lineEnd}`}
+                  type="button"
+                  variant="secondary"
+                >
+                  {anchor.filePath.split('/').pop() || anchor.filePath}:
+                  {anchor.lineStart}-{anchor.lineEnd}
+                </Button>
               </li>
             ))}
           </ul>
         </div>
-      ) : null}
+      ) : (
+        <>
+          <ThreadExcerpt excerpt={thread.excerpt} />
+          {thread.extraAnchors && thread.extraAnchors.length > 0 ? (
+            <div className="border-b border-[var(--border)] px-3 py-2">
+              <p className="mb-1 text-[11px] font-medium text-[var(--muted)]">
+                Also referencing {thread.extraAnchors.length} selection
+                {thread.extraAnchors.length === 1 ? '' : 's'}:
+              </p>
+              <ul className="grid gap-1">
+                {thread.extraAnchors.map((anchor, index) => (
+                  <li
+                    className="truncate font-mono text-[11px] text-[var(--muted)]"
+                    key={`${anchor.filePath}:${anchor.side}:${anchor.lineStart}-${anchor.lineEnd}:${index}`}
+                  >
+                    {anchor.filePath.split('/').pop() || anchor.filePath}:
+                    {anchor.lineStart}-{anchor.lineEnd}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      )}
       <ol className="divide-y divide-[var(--border)]">
         {thread.comments.map((comment) => {
           if (comment.commentKind === 'system') {
