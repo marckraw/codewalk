@@ -18,7 +18,10 @@ import { StreamingMarkdown } from '@/shared/ui/streaming-markdown'
 import { describeReviewAgentActivity } from './review-agent-activity.pure'
 import { ThreadExcerpt } from './thread-excerpt.presentational'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
-import { describeThreadAnchor } from './review-thread-annotation-anchor.pure'
+import {
+  describeThreadAnchor,
+  formatAnchorLineRange,
+} from './review-thread-annotation-anchor.pure'
 
 export function PersistedReviewThreadAnnotation({
   annotation,
@@ -119,12 +122,12 @@ export function PersistedReviewThreadAnnotation({
                   className="h-auto gap-1 px-1.5 py-0.5 font-mono text-[11px]"
                   onClick={() => annotation.onJumpToAnchor?.(anchor)}
                   size="sm"
-                  title={`${anchor.filePath}:${anchor.lineStart}-${anchor.lineEnd}`}
+                  title={`${anchor.filePath}:${formatAnchorLineRange(anchor)}`}
                   type="button"
                   variant="secondary"
                 >
                   {anchor.filePath.split('/').pop() || anchor.filePath}:
-                  {anchor.lineStart}-{anchor.lineEnd}
+                  {formatAnchorLineRange(anchor)}
                 </Button>
               </li>
             ))}
@@ -146,7 +149,7 @@ export function PersistedReviewThreadAnnotation({
                     key={`${anchor.filePath}:${anchor.side}:${anchor.lineStart}-${anchor.lineEnd}:${index}`}
                   >
                     {anchor.filePath.split('/').pop() || anchor.filePath}:
-                    {anchor.lineStart}-{anchor.lineEnd}
+                    {formatAnchorLineRange(anchor)}
                   </li>
                 ))}
               </ul>
