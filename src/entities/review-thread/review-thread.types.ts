@@ -6,6 +6,8 @@ export type ReviewThreadAgentState =
   | 'streaming'
   | 'complete'
   | 'error'
+export type ReviewThreadCommentKind = 'message' | 'fix-proposal' | 'system'
+export type ReviewThreadFixState = 'proposed' | 'pushed' | 'discarded'
 
 export type ReviewThreadComment = {
   id: string
@@ -14,6 +16,9 @@ export type ReviewThreadComment = {
   authorUserId: string | null
   body: string
   agentState: ReviewThreadAgentState | null
+  commentKind: ReviewThreadCommentKind
+  fixState: ReviewThreadFixState | null
+  commitSha: string | null
   createdAt: string
 }
 

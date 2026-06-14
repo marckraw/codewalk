@@ -154,6 +154,87 @@ async function agentReplyRequest(
   return body.thread
 }
 
+/**
+ * Asks the agent to implement the change discussed in the thread. Returns once
+ * the fix turn is queued — completion is observed by polling
+ * pollReviewThreadAgentReply, exactly like a question.
+ */
+export async function requestReviewThreadAgentFix(input: {
+  instruction?: string
+  threadId: string
+}): Promise<ReviewThread> {
+  const response = await fetch(
+    `/api/review-threads/${encodeURIComponent(input.threadId)}/fix`,
+    {
+      body: JSON.stringify(
+        input.instruction ? { instruction: input.instruction } : {},
+      ),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+    },
+  )
+
+  return readReviewThreadResult(
+    response,
+    `Asking the review agent to fix failed with HTTP ${response.status}.`,
+  )
+}
+
+/** Approves a proposed fix and pushes its commit to the PR head branch. */
+export async function approveReviewThreadFix(input: {
+  commentId: string
+  threadId: string
+}): Promise<ReviewThread> {
+  const response = await fetch(
+    `/api/review-threads/${encodeURIComponent(
+      input.threadId,
+    )}/comments/${encodeURIComponent(input.commentId)}/approve-push`,
+    { method: 'POST' },
+  )
+
+  return readReviewThreadResult(
+    response,
+    `Pushing the fix failed with HTTP ${response.status}.`,
+  )
+}
+
+/** Discards a proposed fix and asks the agent to revert its workspace commit. */
+export async function discardReviewThreadFix(input: {
+  commentId: string
+  threadId: string
+}): Promise<ReviewThread> {
+  const response = await fetch(
+    `/api/review-threads/${encodeURIComponent(
+      input.threadId,
+    )}/comments/${encodeURIComponent(input.commentId)}/discard`,
+    { method: 'POST' },
+  )
+
+  return readReviewThreadResult(
+    response,
+    `Discarding the fix failed with HTTP ${response.status}.`,
+  )
+}
+
+async function readReviewThreadResult(
+  response: Response,
+  fallbackMessage: string,
+): Promise<ReviewThread> {
+  const body = (await readReviewThreadApiResponse(response)) as {
+    error?: string
+    thread?: ReviewThread
+  }
+
+  if (!response.ok || !body.thread) {
+    throw new ReviewThreadApiError(
+      body.error ?? fallbackMessage,
+      response.status,
+    )
+  }
+
+  return body.thread
+}
+
 export type ReviewAgentSessionStatus = {
   activity: string | null
   state: 'none' | 'lost' | 'idle' | 'running' | 'completed' | 'failed'

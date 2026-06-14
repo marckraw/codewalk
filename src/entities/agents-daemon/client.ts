@@ -7,11 +7,13 @@ import {
 } from './config'
 import {
   buildAgentsDaemonExecutionCommandRequestBody,
+  buildAgentsDaemonExecutionPushRequestBody,
   buildAgentsDaemonGenerateGuideRequestBody,
   buildAgentsDaemonExecutionStartRequestBody,
   buildAgentsDaemonSubmitGuideJobRequestBody,
   buildAgentsDaemonUrl,
   parseAgentsDaemonExecutionCommandResult,
+  parseAgentsDaemonExecutionPushResult,
   parseAgentsDaemonExecutionSessionSnapshot,
   parseAgentsDaemonExecutionStartResult,
   parseAgentsDaemonGenerateGuideResult,
@@ -21,6 +23,8 @@ import {
   parseAgentsDaemonMeta,
   type AgentsDaemonExecutionCommandInput,
   type AgentsDaemonExecutionCommandResult,
+  type AgentsDaemonExecutionPushInput,
+  type AgentsDaemonExecutionPushResult,
   type AgentsDaemonExecutionSessionSnapshot,
   type AgentsDaemonExecutionStartInput,
   type AgentsDaemonExecutionStartResult,
@@ -181,6 +185,21 @@ export class AgentsDaemonClient {
       {
         authenticated: true,
         body: buildAgentsDaemonExecutionCommandRequestBody(input),
+        method: 'POST',
+        timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
+      },
+    )
+  }
+
+  async pushExecutionSessionWorkspace(
+    input: AgentsDaemonExecutionPushInput,
+  ): Promise<AgentsDaemonExecutionPushResult> {
+    return this.requestJson(
+      `/v0/execution/sessions/${encodeURIComponent(input.sessionId)}/push`,
+      parseAgentsDaemonExecutionPushResult,
+      {
+        authenticated: true,
+        body: buildAgentsDaemonExecutionPushRequestBody(input),
         method: 'POST',
         timeoutMs: JOB_API_REQUEST_TIMEOUT_MS,
       },

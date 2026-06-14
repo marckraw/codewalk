@@ -210,6 +210,22 @@ export type AgentsDaemonExecutionCommandResult = {
   accepted: boolean
 }
 
+export type AgentsDaemonExecutionPushInput = {
+  sessionId: string
+  branch: string
+}
+
+export type AgentsDaemonExecutionPushRequestBody = {
+  protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
+  branch: string
+}
+
+export type AgentsDaemonExecutionPushResult = {
+  branch: string
+  commitSha: string
+  pushed: boolean
+}
+
 /**
  * The slice of daemon conversation items Codewalk consumes when extracting
  * agent replies. Items the daemon emits with other kinds (tool calls,
@@ -416,6 +432,40 @@ export function parseAgentsDaemonExecutionCommandResult(
   const obj = requiredRecord(value, 'execution command result')
 
   return { accepted: requireBoolean(obj.accepted, 'accepted') }
+}
+
+export function buildAgentsDaemonExecutionPushRequestBody(
+  input: AgentsDaemonExecutionPushInput,
+): AgentsDaemonExecutionPushRequestBody {
+  const branch = input.branch.trim()
+
+  if (!branch) {
+    throw new Error('Execution push requires a branch.')
+  }
+
+  return {
+    branch,
+    protocolVersion: EXECUTION_PROTOCOL_VERSION,
+  }
+}
+
+export function parseAgentsDaemonExecutionPushResult(
+  value: unknown,
+): AgentsDaemonExecutionPushResult {
+  const obj = requiredRecord(value, 'execution push result')
+  const protocolVersion = requireNumber(obj.protocolVersion, 'protocolVersion')
+
+  if (protocolVersion !== EXECUTION_PROTOCOL_VERSION) {
+    throw new Error(
+      `Unsupported execution protocol version: ${protocolVersion}`,
+    )
+  }
+
+  return {
+    branch: requireString(obj.branch, 'branch'),
+    commitSha: requireString(obj.commitSha, 'commitSha'),
+    pushed: requireBoolean(obj.pushed, 'pushed'),
+  }
 }
 
 /**

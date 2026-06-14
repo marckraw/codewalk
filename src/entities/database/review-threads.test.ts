@@ -72,6 +72,9 @@ describe('buildReviewThreadCommentRow', () => {
       body: 'why does this work?',
       agentState: null,
       agentSeqStart: null,
+      commentKind: 'message',
+      fixState: null,
+      commitSha: null,
     })
   })
 
@@ -89,6 +92,23 @@ describe('buildReviewThreadCommentRow', () => {
       authorType: 'agent',
       agentState: 'pending',
       agentSeqStart: 17,
+    })
+  })
+
+  it('carries a fix-proposal kind and commit sha through', () => {
+    expect(
+      buildReviewThreadCommentRow({
+        threadId: 't-1',
+        authorType: 'agent',
+        authorUserId: null,
+        body: 'Pushed abc to feature/x',
+        commentKind: 'system',
+        commitSha: 'abc1234',
+      }),
+    ).toMatchObject({
+      commentKind: 'system',
+      commitSha: 'abc1234',
+      fixState: null,
     })
   })
 })

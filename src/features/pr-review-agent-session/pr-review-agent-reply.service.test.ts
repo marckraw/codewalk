@@ -3,6 +3,7 @@ import { AgentsDaemonClientError } from '@/entities/agents-daemon'
 import {
   addReviewThreadComment,
   claimReviewThreadAgentTurn,
+  getLatestPullRequestSnapshotByRef,
   getReviewAgentSessionForPullRequest,
   getReviewThread,
   updateReviewAgentSessionFromSnapshot,
@@ -11,6 +12,9 @@ import {
 import { ensurePullRequestReviewAgentSession } from './pr-review-agent-session.service'
 import {
   advancePullRequestReviewAgentReply,
+  approvePullRequestReviewAgentFix,
+  discardPullRequestReviewAgentFix,
+  startPullRequestReviewAgentFix,
   startPullRequestReviewAgentReply,
 } from './pr-review-agent-reply.service'
 
@@ -25,6 +29,7 @@ vi.mock('@/entities/database', async () => {
     ...actual,
     addReviewThreadComment: vi.fn(),
     claimReviewThreadAgentTurn: vi.fn(),
+    getLatestPullRequestSnapshotByRef: vi.fn(),
     getReviewAgentSessionForPullRequest: vi.fn(),
     getReviewThread: vi.fn(),
     updateReviewAgentSessionFromSnapshot: vi.fn(),
@@ -52,6 +57,7 @@ const mockedUpdateSessionFromSnapshot = vi.mocked(
   updateReviewAgentSessionFromSnapshot,
 )
 const mockedEnsureSession = vi.mocked(ensurePullRequestReviewAgentSession)
+const mockedGetLatestSnapshot = vi.mocked(getLatestPullRequestSnapshotByRef)
 
 const questionComment = {
   id: 'comment-1',
@@ -61,6 +67,9 @@ const questionComment = {
   body: 'Why is this safe?',
   agentState: null,
   agentSeqStart: null,
+  commentKind: 'message' as const,
+  fixState: null as 'proposed' | 'pushed' | 'discarded' | null,
+  commitSha: null as string | null,
   createdAt: new Date('2026-06-12T10:00:00Z'),
 }
 
@@ -72,6 +81,9 @@ const pendingUnsent = {
   body: '',
   agentState: 'pending' as const,
   agentSeqStart: null as number | null,
+  commentKind: 'message' as 'message' | 'fix-proposal' | 'system',
+  fixState: null as 'proposed' | 'pushed' | 'discarded' | null,
+  commitSha: null as string | null,
   createdAt: new Date('2026-06-12T10:00:05Z'),
 }
 
@@ -333,5 +345,195 @@ describe('review agent reply state machine', () => {
     expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
       expect.objectContaining({ agentState: 'error', commentId: 'comment-2' }),
     )
+  })
+})
+
+const pendingFixUnsent = {
+  ...pendingUnsent,
+  commentKind: 'fix-proposal' as const,
+}
+const pendingFixSent = { ...pendingFixUnsent, agentSeqStart: 3 }
+
+const fixProposalProposed = {
+  id: 'fix-1',
+  threadId: 'thread-1',
+  authorType: 'agent' as const,
+  authorUserId: null,
+  body: 'Renamed token to authToken.\n src/auth.ts | 4 ++--',
+  agentState: 'complete' as const,
+  agentSeqStart: 3 as number | null,
+  commentKind: 'fix-proposal' as const,
+  fixState: 'proposed' as 'proposed' | 'pushed' | 'discarded' | null,
+  commitSha: null as string | null,
+  createdAt: new Date('2026-06-12T10:01:00Z'),
+}
+
+describe('review agent fix flow', () => {
+  beforeEach(() => {
+    mockedAddReviewThreadComment.mockResolvedValue(pendingFixUnsent)
+    mockedClaimReviewThreadAgentTurn.mockResolvedValue(pendingFixSent)
+    mockedGetSession.mockResolvedValue(sessionRow)
+    mockedUpdateReviewThreadComment.mockResolvedValue(pendingFixSent)
+    mockedUpdateSessionFromSnapshot.mockResolvedValue({} as never)
+    mockedGetLatestSnapshot.mockResolvedValue({ headRef: 'feature/x' } as never)
+    mockedEnsureSession.mockResolvedValue({
+      action: 'reused',
+      daemonSnapshot: daemonSnapshot({}),
+      session: sessionRow,
+    } as never)
+  })
+
+  afterEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('start fix records the instruction and a pending fix-proposal comment', async () => {
+    mockedGetReviewThread
+      .mockResolvedValueOnce(makeThread([questionComment]))
+      .mockResolvedValue(makeThread([questionComment, pendingFixUnsent]))
+    const client = makeClient([daemonSnapshot({ status: 'idle' })])
+
+    await startPullRequestReviewAgentFix({
+      client,
+      instruction: 'Rename token to authToken',
+      requestedByUserId: 'user-1',
+      threadId: 'thread-1',
+    })
+
+    expect(mockedAddReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorType: 'user',
+        body: 'Rename token to authToken',
+      }),
+    )
+    expect(mockedAddReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentState: 'pending',
+        authorType: 'agent',
+        commentKind: 'fix-proposal',
+      }),
+    )
+  })
+
+  it('advance sends the fix prompt for a pending fix-proposal', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingFixUnsent]),
+    )
+    const client = makeClient([daemonSnapshot({ status: 'idle' })])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(client.sendExecutionSessionMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining('commit it locally'),
+      }),
+    )
+  })
+
+  it('advance marks a completed fix-proposal as proposed', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingFixSent]),
+    )
+    const client = makeClient([
+      daemonSnapshot({
+        conversation: answeredConversation,
+        lastSeq: 9,
+        status: 'idle',
+      }),
+    ])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({ agentState: 'complete', fixState: 'proposed' }),
+    )
+  })
+
+  it('approve pushes the workspace and records the commit', async () => {
+    mockedGetReviewThread.mockResolvedValue({
+      ...makeThread([questionComment]),
+      comments: [questionComment, fixProposalProposed],
+    })
+    const client = {
+      pushExecutionSessionWorkspace: vi.fn().mockResolvedValue({
+        branch: 'feature/x',
+        commitSha: 'abc1234',
+        pushed: true,
+      }),
+    }
+
+    await approvePullRequestReviewAgentFix({
+      client,
+      commentId: 'fix-1',
+      threadId: 'thread-1',
+    })
+
+    expect(client.pushExecutionSessionWorkspace).toHaveBeenCalledWith({
+      branch: 'feature/x',
+      sessionId: 'daemon-1',
+    })
+    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commentId: 'fix-1',
+        commitSha: 'abc1234',
+        fixState: 'pushed',
+      }),
+    )
+    expect(mockedAddReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        commentKind: 'system',
+        commitSha: 'abc1234',
+      }),
+    )
+  })
+
+  it('approve leaves the proposal open when there is nothing to push', async () => {
+    mockedGetReviewThread.mockResolvedValue({
+      ...makeThread([questionComment]),
+      comments: [questionComment, fixProposalProposed],
+    })
+    const client = {
+      pushExecutionSessionWorkspace: vi.fn().mockResolvedValue({
+        branch: 'feature/x',
+        commitSha: 'abc1234',
+        pushed: false,
+      }),
+    }
+
+    await approvePullRequestReviewAgentFix({
+      client,
+      commentId: 'fix-1',
+      threadId: 'thread-1',
+    })
+
+    expect(mockedUpdateReviewThreadComment).not.toHaveBeenCalledWith(
+      expect.objectContaining({ fixState: 'pushed' }),
+    )
+    expect(mockedAddReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({ commentKind: 'system' }),
+    )
+  })
+
+  it('discard marks the proposal discarded and asks the agent to revert', async () => {
+    mockedGetReviewThread.mockResolvedValue({
+      ...makeThread([questionComment]),
+      comments: [questionComment, fixProposalProposed],
+    })
+    const client = {
+      sendExecutionSessionMessage: vi
+        .fn()
+        .mockResolvedValue({ accepted: true }),
+    }
+
+    await discardPullRequestReviewAgentFix({
+      client,
+      commentId: 'fix-1',
+      threadId: 'thread-1',
+    })
+
+    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({ commentId: 'fix-1', fixState: 'discarded' }),
+    )
+    expect(client.sendExecutionSessionMessage).toHaveBeenCalled()
   })
 })
