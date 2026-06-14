@@ -115,6 +115,7 @@ describe('AgentsDaemonClient', () => {
     await expect(
       client.startExecutionSession({
         automationMode: true,
+        callback: { secret: 'cb-secret', url: 'https://codewalk.example/cb' },
         initialMessage: 'Ready?',
         model: 'gpt-5.5',
         providerId: 'codex',
@@ -132,6 +133,7 @@ describe('AgentsDaemonClient', () => {
       expect.objectContaining({ method: 'POST' }),
     )
     expect(JSON.parse(String(fetch.mock.calls[0]?.[1]?.body))).toMatchObject({
+      callback: { secret: 'cb-secret', url: 'https://codewalk.example/cb' },
       config: {
         automationMode: true,
         initialMessage: 'Ready?',
