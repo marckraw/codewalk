@@ -5,6 +5,7 @@ import {
   listReviewThreadsForPullRequest,
   upsertAuthenticatedUser,
 } from '@/entities/database'
+import { parseReviewThreadExtraAnchors } from '@/entities/review-thread'
 
 export const runtime = 'nodejs'
 
@@ -62,6 +63,7 @@ export async function POST(request: Request) {
     lineStart?: unknown
     lineEnd?: unknown
     excerpt?: unknown
+    extraAnchors?: unknown
     body?: unknown
   }
 
@@ -119,6 +121,7 @@ export async function POST(request: Request) {
     lineStart: input.lineStart as number,
     lineEnd: input.lineEnd as number,
     excerpt: input.excerpt,
+    extraAnchors: parseReviewThreadExtraAnchors(input.extraAnchors),
     createdByUserId: user.id,
     body: input.body,
   })

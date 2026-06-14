@@ -75,6 +75,36 @@ describe('PR review agent session helpers', () => {
     expect(prompt).toContain('Question: Why is this safe?')
   })
 
+  it('includes additional anchors in a multi-anchor question prompt', () => {
+    const prompt = buildReviewThreadAgentQuestionPrompt({
+      anchor: {
+        anchorCommitSha: 'abc123',
+        excerpt: 'const token = parse(header)',
+        filePath: 'src/auth.ts',
+        lineEnd: 14,
+        lineStart: 10,
+        side: 'new',
+      },
+      additionalAnchors: [
+        {
+          anchorCommitSha: 'abc123',
+          excerpt: 'verifyToken(token)',
+          filePath: 'src/verify.ts',
+          lineEnd: 20,
+          lineStart: 18,
+          side: 'new',
+        },
+      ],
+      history: [],
+      question: 'How do these interact?',
+    })
+
+    expect(prompt).toContain('spanning several diff selections')
+    expect(prompt).toContain('File: src/auth.ts')
+    expect(prompt).toContain('File: src/verify.ts')
+    expect(prompt).toContain('verifyToken(token)')
+  })
+
   it('builds a fix prompt that commits locally without pushing', () => {
     const prompt = buildReviewThreadAgentFixPrompt({
       anchor: {

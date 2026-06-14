@@ -64,10 +64,13 @@ export function buildPullRequestReviewAgentInitialPrompt(
 /**
  * The follow-up sent for one review-thread question. The anchor excerpt is
  * denormalized into the prompt so the agent answers about the exact lines the
- * reviewer selected even when the checkout has moved on.
+ * reviewer selected even when the checkout has moved on. Multi-anchor
+ * discussions append each additional selection so the agent can reason across
+ * all of them.
  */
 export function buildReviewThreadAgentQuestionPrompt(input: {
   anchor: ReviewAgentThreadAnchor
+  additionalAnchors?: ReviewAgentThreadAnchor[]
   history: ReviewAgentThreadHistoryEntry[]
   question: string
 }) {
@@ -83,8 +86,31 @@ export function buildReviewThreadAgentQuestionPrompt(input: {
         ]
       : []
 
+  const extra = input.additionalAnchors ?? []
+  const additionalLines =
+    extra.length > 0
+      ? [
+          `The question also references ${extra.length} other selection${
+            extra.length === 1 ? '' : 's'
+          }:`,
+          ...extra.flatMap((anchor) => [
+            '',
+            `File: ${anchor.filePath}`,
+            `Lines: ${anchor.lineStart}-${anchor.lineEnd} (${
+              anchor.side === 'old' ? 'old' : 'new'
+            } side, at commit ${anchor.anchorCommitSha})`,
+            '```',
+            anchor.excerpt,
+            '```',
+          ]),
+          '',
+        ]
+      : []
+
   return [
-    'A reviewer asked a question anchored to a diff selection.',
+    extra.length > 0
+      ? 'A reviewer asked a question spanning several diff selections.'
+      : 'A reviewer asked a question anchored to a diff selection.',
     '',
     `File: ${input.anchor.filePath}`,
     `Lines: ${input.anchor.lineStart}-${input.anchor.lineEnd} (${
@@ -95,6 +121,7 @@ export function buildReviewThreadAgentQuestionPrompt(input: {
     input.anchor.excerpt,
     '```',
     '',
+    ...additionalLines,
     ...historyLines,
     `Question: ${input.question}`,
     '',

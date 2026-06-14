@@ -1,0 +1,1 @@
+ALTER TABLE "review_threads" ADD COLUMN "extra_anchors" jsonb;

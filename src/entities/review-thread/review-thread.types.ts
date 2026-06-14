@@ -9,6 +9,16 @@ export type ReviewThreadAgentState =
 export type ReviewThreadCommentKind = 'message' | 'fix-proposal' | 'system'
 export type ReviewThreadFixState = 'proposed' | 'pushed' | 'discarded'
 
+/** An additional selection a multi-anchor discussion thread references. */
+export type ReviewThreadAnchorRef = {
+  anchorCommitSha: string
+  excerpt: string
+  filePath: string
+  lineEnd: number
+  lineStart: number
+  side: ReviewThreadDiffSide
+}
+
 export type ReviewThreadComment = {
   id: string
   threadId: string
@@ -35,6 +45,7 @@ export type ReviewThread = {
   lineStart: number
   lineEnd: number
   excerpt: string
+  extraAnchors?: ReviewThreadAnchorRef[] | null
   status: ReviewThreadStatus
   createdByUserId: string
   createdAt: string
@@ -56,5 +67,6 @@ export type CreateReviewThreadInput = ListReviewThreadsParams & {
   lineStart: number
   lineEnd: number
   excerpt: string
+  extraAnchors?: ReviewThreadAnchorRef[]
   body: string
 }

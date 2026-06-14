@@ -566,6 +566,10 @@ export const reviewThreads = pgTable(
     lineStart: integer('line_start').notNull(),
     lineEnd: integer('line_end').notNull(),
     excerpt: text('excerpt').notNull(),
+    // P6 multi-anchor: additional selections this thread references beyond its
+    // primary anchor (the columns above). Null/empty for ordinary single-anchor
+    // threads; the agent prompt includes every excerpt.
+    extraAnchors: jsonb('extra_anchors').$type<ReviewThreadAnchorRef[]>(),
     status: reviewThreadStatus('status').default('open').notNull(),
     createdByUserId: uuid('created_by_user_id')
       .notNull()
@@ -672,6 +676,15 @@ export const reviewAgentSessions = pgTable(
 
 export type ReviewThreadStatus = 'open' | 'resolved' | 'outdated'
 export type ReviewThreadDiffSide = 'old' | 'new'
+/** An additional selection a multi-anchor discussion thread references. */
+export type ReviewThreadAnchorRef = {
+  anchorCommitSha: string
+  excerpt: string
+  filePath: string
+  lineEnd: number
+  lineStart: number
+  side: ReviewThreadDiffSide
+}
 export type ReviewThreadCommentAuthorType = 'user' | 'agent'
 export type ReviewThreadAgentState =
   | 'pending'

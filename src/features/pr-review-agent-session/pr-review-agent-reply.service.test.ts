@@ -104,6 +104,7 @@ function makeThread(
     lineStart: 10,
     lineEnd: 14,
     excerpt: 'const token = parse(header)',
+    extraAnchors: null,
     status: 'open' as const,
     createdByUserId: 'user-1',
     createdAt: new Date('2026-06-12T10:00:00Z'),

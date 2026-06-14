@@ -12,6 +12,7 @@ export type ReviewThreadAnnotationData =
       kind: 'draft'
       onBodyChange: (body: string) => void
       onCancel: () => void
+      onPinSelection: () => void
       onSubmit: () => void
     }
   | {

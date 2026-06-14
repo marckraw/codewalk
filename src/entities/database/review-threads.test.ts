@@ -33,6 +33,7 @@ describe('buildReviewThreadRow', () => {
       lineStart: 10,
       lineEnd: 14,
       excerpt: 'const x = 1',
+      extraAnchors: null,
       createdByUserId: 'user-1',
     })
   })
