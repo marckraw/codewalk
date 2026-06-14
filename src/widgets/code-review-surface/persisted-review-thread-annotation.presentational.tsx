@@ -13,7 +13,7 @@ import {
 import { AnimatedStatus } from '@/shared/ui/animated-status'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
-import { MarkdownText } from './markdown'
+import { StreamingMarkdown } from '@/shared/ui/streaming-markdown'
 import { describeReviewAgentActivity } from './review-agent-activity.pure'
 import { ThreadExcerpt } from './thread-excerpt.presentational'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
@@ -127,9 +127,10 @@ export function PersistedReviewThreadAnnotation({
                 ) : null}
               </div>
               {comment.body ? (
-                <MarkdownText
-                  className="min-w-0 break-words leading-5 text-[var(--foreground)]"
+                <StreamingMarkdown
+                  className="leading-5 text-[var(--foreground)]"
                   content={comment.body}
+                  isStreaming={comment.agentState === 'streaming'}
                 />
               ) : null}
               {isFixProposal && comment.fixState === 'proposed' ? (
