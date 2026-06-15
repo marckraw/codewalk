@@ -596,17 +596,46 @@ export function ReviewWorkspace({
       setReplyingThreadId(threadId)
       setThreadErrors((current) => ({ ...current, [threadId]: '' }))
 
+      // Optimistic: show the question instantly (dimmed) and clear the box, so
+      // hitting "Ask agent" feels immediate instead of waiting on the round-trip.
+      const optimistic = buildOptimisticUserComment(threadId, body)
+      setReviewThreads((current) =>
+        current.map((thread) =>
+          thread.id === threadId
+            ? { ...thread, comments: [...thread.comments, optimistic] }
+            : thread,
+        ),
+      )
+      setReplyBodies((current) => ({ ...current, [threadId]: '' }))
+
       try {
         const comment = await addReviewThreadComment({ body, threadId })
         setReviewThreads((current) =>
           current.map((thread) =>
             thread.id === threadId
-              ? { ...thread, comments: [...thread.comments, comment] }
+              ? {
+                  ...thread,
+                  comments: thread.comments.map((existing) =>
+                    existing.id === optimistic.id ? comment : existing,
+                  ),
+                }
               : thread,
           ),
         )
-        setReplyBodies((current) => ({ ...current, [threadId]: '' }))
       } catch (error) {
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === threadId
+              ? {
+                  ...thread,
+                  comments: thread.comments.filter(
+                    (existing) => existing.id !== optimistic.id,
+                  ),
+                }
+              : thread,
+          ),
+        )
+        setReplyBodies((current) => ({ ...current, [threadId]: body }))
         setThreadErrors((current) => ({
           ...current,
           [threadId]: reviewThreadErrorMessage(error),
@@ -636,17 +665,46 @@ export function ReviewWorkspace({
       setReplyingThreadId(threadId)
       setThreadErrors((current) => ({ ...current, [threadId]: '' }))
 
+      // Optimistic: the reply appears instantly (dimmed) and the box clears;
+      // the persisted comment replaces it on success, or it rolls back on error.
+      const optimistic = buildOptimisticUserComment(threadId, body)
+      setReviewThreads((current) =>
+        current.map((thread) =>
+          thread.id === threadId
+            ? { ...thread, comments: [...thread.comments, optimistic] }
+            : thread,
+        ),
+      )
+      setReplyBodies((current) => ({ ...current, [threadId]: '' }))
+
       try {
         const comment = await addReviewThreadComment({ body, threadId })
         setReviewThreads((current) =>
           current.map((thread) =>
             thread.id === threadId
-              ? { ...thread, comments: [...thread.comments, comment] }
+              ? {
+                  ...thread,
+                  comments: thread.comments.map((existing) =>
+                    existing.id === optimistic.id ? comment : existing,
+                  ),
+                }
               : thread,
           ),
         )
-        setReplyBodies((current) => ({ ...current, [threadId]: '' }))
       } catch (error) {
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === threadId
+              ? {
+                  ...thread,
+                  comments: thread.comments.filter(
+                    (existing) => existing.id !== optimistic.id,
+                  ),
+                }
+              : thread,
+          ),
+        )
+        setReplyBodies((current) => ({ ...current, [threadId]: body }))
         setThreadErrors((current) => ({
           ...current,
           [threadId]: reviewThreadErrorMessage(error),
@@ -1261,6 +1319,37 @@ function buildReviewThreadAnnotations(
   }
 
   return annotations
+}
+
+// Monotonic suffix so each optimistic comment gets a stable, unique id without
+// relying on timestamps or randomness.
+let optimisticCommentSeq = 0
+
+/**
+ * A placeholder for the user's just-submitted comment, shown immediately while
+ * the real one is persisted. `pending` dims it; on success it is swapped for the
+ * server record, on failure it is removed.
+ */
+function buildOptimisticUserComment(
+  threadId: string,
+  body: string,
+): ReviewThread['comments'][number] {
+  optimisticCommentSeq += 1
+
+  return {
+    id: `optimistic-${threadId}-${optimisticCommentSeq}`,
+    threadId,
+    authorType: 'user',
+    authorUserId: null,
+    authorName: null,
+    body,
+    agentState: null,
+    commentKind: 'message',
+    fixState: null,
+    commitSha: null,
+    createdAt: new Date().toISOString(),
+    pending: true,
+  }
 }
 
 function reviewThreadErrorMessage(error: unknown): string {

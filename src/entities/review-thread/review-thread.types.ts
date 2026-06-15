@@ -32,6 +32,9 @@ export type ReviewThreadComment = {
   fixState: ReviewThreadFixState | null
   commitSha: string | null
   createdAt: string
+  /** Set on an optimistic comment shown before the server confirms it; the UI
+   *  dims it as "sending". Replaced by the persisted comment on success. */
+  pending?: boolean
 }
 
 export type ReviewThread = {
