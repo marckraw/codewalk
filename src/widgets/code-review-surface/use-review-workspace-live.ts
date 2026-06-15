@@ -101,10 +101,13 @@ export function useReviewWorkspaceLive(
     setPending(true)
     // Optimistically reflect that work has begun so the preparing state shows
     // immediately, before the first poll observes the running generation row.
+    // This must move off `ready` (regenerate) and `failed` (retry) too —
+    // otherwise `shouldPollReviewWorkspace` treats those as terminal and
+    // polling never starts, so the new run is never observed.
     setWorkspace((current) =>
-      current.state === 'imported'
-        ? { ...current, state: 'preparing' }
-        : current,
+      current.state === 'preparing'
+        ? current
+        : { ...current, state: 'preparing' },
     )
   }, [])
 

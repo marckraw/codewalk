@@ -90,12 +90,15 @@ export function deriveReviewWorkspaceState(input: {
     return 'failed'
   }
 
-  if (input.guide?.status === 'ready') {
-    return 'ready'
-  }
-
+  // A running generation wins over an existing ready guide: on a regenerate the
+  // prior guide row stays `ready` while the new run is in flight, so checking
+  // the guide first would mask the regenerate and report `ready` the whole time.
   if (input.generation?.status === 'running') {
     return 'preparing'
+  }
+
+  if (input.guide?.status === 'ready') {
+    return 'ready'
   }
 
   return 'imported'

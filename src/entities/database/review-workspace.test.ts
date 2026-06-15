@@ -38,6 +38,18 @@ describe('deriveReviewWorkspaceState', () => {
       }),
     ).toBe('failed')
   })
+
+  it('reports preparing while regenerating even when a prior guide is ready', () => {
+    // Regenerate flips the generation row back to running but leaves the old
+    // guide row ready; the in-flight run must win so the workspace keeps
+    // polling instead of looking done.
+    expect(
+      deriveReviewWorkspaceState({
+        generation: { status: 'running' },
+        guide: { status: 'ready' },
+      }),
+    ).toBe('preparing')
+  })
 })
 
 describe('presentCodeReviewGuideGeneration', () => {

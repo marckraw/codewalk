@@ -101,4 +101,43 @@ describe('useReviewWorkspaceLive', () => {
     expect(result.current.workspace.state).toBe('ready')
     expect(fetchMock).toHaveBeenCalled()
   })
+
+  it('regenerates from a ready workspace: bumps to preparing and polls to the new guide', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(makeWorkspace('preparing')))
+      .mockResolvedValueOnce(jsonResponse(makeWorkspace('ready')))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = renderHook(() =>
+      useReviewWorkspaceLive(makeWorkspace('ready'), {
+        autoGenerate: false,
+      }),
+    )
+
+    expect(result.current.workspace.state).toBe('ready')
+
+    act(() => {
+      result.current.markGenerationStarted()
+    })
+    // Regenerate must move off the (terminal) ready state so polling starts.
+    expect(result.current.workspace.state).toBe('preparing')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500)
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(result.current.workspace.state).toBe('preparing')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2500)
+    })
+    expect(result.current.workspace.state).toBe('ready')
+
+    // Stops once the regenerate reaches the new ready guide.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000)
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })
