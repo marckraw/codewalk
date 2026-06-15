@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useId, useState } from 'react'
+import { useId, useState, useTransition } from 'react'
 import type { FormEvent } from 'react'
 import { GitPullRequestArrow, X } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
@@ -32,6 +32,7 @@ export function OpenPullRequestDialog() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [importResult, setImportResult] =
     useState<PullRequestImportResponse | null>(null)
+  const [isNavigating, startNavigation] = useTransition()
   const router = useRouter()
   const titleId = useId()
   const descriptionId = useId()
@@ -72,7 +73,13 @@ export function OpenPullRequestDialog() {
       }
 
       setImportResult(body)
-      router.push(`/review/${encodeURIComponent(body.snapshot.id)}?generate=1`)
+      // Keep the button in its pending state through the navigation, not just
+      // the fetch — otherwise it flips back to "Import PR" while the review
+      // page is still loading.
+      const snapshotId = body.snapshot.id
+      startNavigation(() => {
+        router.push(`/review/${encodeURIComponent(snapshotId)}?generate=1`)
+      })
     } catch {
       setError('The pull request import route is unavailable.')
     } finally {
@@ -152,8 +159,12 @@ export function OpenPullRequestDialog() {
                 <X aria-hidden="true" className="size-4" />
                 Cancel
               </Button>
-              <Button disabled={isSubmitting} type="submit" variant="primary">
-                {isSubmitting ? 'Importing' : 'Import PR'}
+              <Button
+                disabled={isSubmitting || isNavigating}
+                type="submit"
+                variant="primary"
+              >
+                {isSubmitting || isNavigating ? 'Importing' : 'Import PR'}
               </Button>
             </div>
           </form>
