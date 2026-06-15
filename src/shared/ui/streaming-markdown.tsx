@@ -1,14 +1,6 @@
 'use client'
 
-import { Streamdown, type Components } from 'streamdown'
-import { cn } from '@/shared/lib/cn.pure'
-
-// Light/dark Shiki themes for fenced code blocks; Streamdown picks per the
-// active color scheme. Code blocks are left to Streamdown so they highlight.
-const SHIKI_THEME: ['github-light', 'github-dark'] = [
-  'github-light',
-  'github-dark',
-]
+import dynamic from 'next/dynamic'
 
 interface StreamingMarkdownProps {
   content: string
@@ -19,88 +11,33 @@ interface StreamingMarkdownProps {
   isStreaming?: boolean
 }
 
-const COMPONENTS: Components = {
-  a: ({ className, ...props }) => (
-    <a
-      className={cn(
-        'break-words font-medium text-primary underline underline-offset-2 hover:opacity-80',
-        className,
-      )}
-      rel="noreferrer noopener"
-      target="_blank"
-      {...props}
-    />
-  ),
-  em: ({ className, ...props }) => (
-    <em className={cn('italic', className)} {...props} />
-  ),
-  h1: ({ className, ...props }) => (
-    <h1 className={cn('my-2 text-sm font-semibold', className)} {...props} />
-  ),
-  h2: ({ className, ...props }) => (
-    <h2 className={cn('my-2 text-sm font-semibold', className)} {...props} />
-  ),
-  h3: ({ className, ...props }) => (
-    <h3
-      className={cn('my-1.5 text-xs font-semibold uppercase', className)}
-      {...props}
-    />
-  ),
-  li: ({ className, ...props }) => (
-    <li className={cn('my-0.5 min-w-0', className)} {...props} />
-  ),
-  ol: ({ className, ...props }) => (
-    <ol
-      className={cn('my-1 grid list-decimal gap-1 pl-5', className)}
-      {...props}
-    />
-  ),
-  p: ({ className, ...props }) => (
-    <p className={cn('my-1 leading-5 break-words', className)} {...props} />
-  ),
-  strong: ({ className, ...props }) => (
-    <strong
-      className={cn('font-semibold text-[var(--foreground)]', className)}
-      {...props}
-    />
-  ),
-  ul: ({ className, ...props }) => (
-    <ul
-      className={cn('my-1 grid list-disc gap-1 pl-5', className)}
-      {...props}
-    />
-  ),
-}
+// Streamdown pulls in Shiki (heavy) and is only needed once an agent reply or
+// discussion actually renders markdown — never on the initial guide/diff paint.
+// Deferring it to its own client chunk keeps it out of the review page's first
+// load; ssr:false because it is purely client-rendered behind auth.
+const StreamingMarkdownContent = dynamic(
+  () =>
+    import('./streaming-markdown-content').then(
+      (mod) => mod.StreamingMarkdownContent,
+    ),
+  {
+    loading: () => (
+      <div className="h-4 w-24 animate-pulse rounded bg-[var(--panel-subtle)]" />
+    ),
+    ssr: false,
+  },
+)
 
 /**
- * Markdown renderer for streamed agent text. Built on Streamdown (the renderer
- * Convergence uses) so partial markdown that arrives mid-stream renders cleanly
- * instead of flashing broken syntax; fenced code is Shiki-highlighted. The
- * `min-w-0 break-words` wrapper keeps long lines wrapping within the card.
+ * Markdown renderer for streamed agent text. Empty bodies render nothing
+ * synchronously (so the heavy renderer chunk is never loaded for them); any
+ * real content lazy-loads the Streamdown-backed body. The `min-w-0 break-words`
+ * wrapper inside keeps long lines wrapping within the card.
  */
-export function StreamingMarkdown({
-  className,
-  content,
-  isStreaming,
-}: StreamingMarkdownProps) {
-  if (!content.trim()) {
+export function StreamingMarkdown(props: StreamingMarkdownProps) {
+  if (!props.content.trim()) {
     return null
   }
 
-  return (
-    <div
-      className={cn(
-        'min-w-0 break-words text-xs text-[var(--foreground)] [&_:first-child]:mt-0 [&_:last-child]:mb-0',
-        className,
-      )}
-    >
-      <Streamdown
-        components={COMPONENTS}
-        isAnimating={isStreaming === true}
-        shikiTheme={SHIKI_THEME}
-      >
-        {content}
-      </Streamdown>
-    </div>
-  )
+  return <StreamingMarkdownContent {...props} />
 }
