@@ -3,6 +3,7 @@ import { ArrowUpRight, GitPullRequestArrow } from 'lucide-react'
 import { CodeReviewGuideGenerationControl } from '@/features/code-review-guide-generation-control'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import { LinkPendingIndicator } from '@/shared/ui/link-pending-indicator'
 import type {
   ReviewWorkspaceState,
   ReviewWorkspaceSummary,
@@ -54,6 +55,7 @@ export function ReviewWorkspaceRow({
           <span className="truncate font-mono text-xs text-[var(--muted)]">
             {item.owner}/{item.repo} #{item.number}
           </span>
+          <LinkPendingIndicator className="ml-auto" />
         </div>
         <p className="truncate text-sm font-semibold group-hover:underline">
           {item.title}
@@ -92,6 +94,7 @@ export function ReviewWorkspaceRow({
         >
           <Link href={`/review/${encodeURIComponent(item.id)}`}>
             Open
+            <LinkPendingIndicator className="text-current" />
             <ArrowUpRight className="size-3.5" />
           </Link>
         </Button>

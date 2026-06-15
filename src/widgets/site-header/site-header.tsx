@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { AuthControls } from '@/features/auth'
 import { ThemeModeToggle } from '@/features/theme-toggle'
+import { LinkPendingIndicator } from '@/shared/ui/link-pending-indicator'
 import { Toolbar } from '@/shared/ui/toolbar'
 import { APP_NAME } from '@/shared/lib/product'
 
@@ -34,22 +35,25 @@ export function SiteHeader() {
             className="ml-2 hidden items-center gap-1 sm:flex"
           >
             <Link
-              className="rounded-md px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--panel-subtle)] hover:text-[var(--foreground)]"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--panel-subtle)] hover:text-[var(--foreground)]"
               href="/"
             >
               Reviews
+              <LinkPendingIndicator className="size-3" />
             </Link>
             <Link
-              className="rounded-md px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--panel-subtle)] hover:text-[var(--foreground)]"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--panel-subtle)] hover:text-[var(--foreground)]"
               href="/settings"
             >
               Settings
+              <LinkPendingIndicator className="size-3" />
             </Link>
             <Link
-              className="rounded-md px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--panel-subtle)] hover:text-[var(--foreground)]"
+              className="inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-xs font-medium text-[var(--muted)] hover:bg-[var(--panel-subtle)] hover:text-[var(--foreground)]"
               href="/status"
             >
               Status
+              <LinkPendingIndicator className="size-3" />
             </Link>
           </nav>
         </div>
