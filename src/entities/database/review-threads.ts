@@ -64,23 +64,57 @@ export type ReviewThreadWithComments = ReviewThreadRow & {
   comments: ReviewThreadCommentRecord[]
 }
 
-/**
- * Resolves each comment's author display name from the users table. Agent and
- * authorless comments resolve to null; the UI renders those by author type.
- */
-async function attachCommentAuthors(
+/** Unique, non-null author ids across a set of comments. */
+export function collectCommentAuthorIds(
   comments: ReviewThreadCommentRow[],
-): Promise<ReviewThreadCommentRecord[]> {
-  const authorIds = [
+): string[] {
+  return [
     ...new Set(
       comments
         .map((comment) => comment.authorUserId)
         .filter((id): id is string => Boolean(id)),
     ),
   ]
+}
 
+/**
+ * Attach each comment's author display name from a prefetched name map. Agent
+ * and authorless comments resolve to null; the UI renders those by author type.
+ */
+export function mapCommentsWithAuthors(
+  comments: ReviewThreadCommentRow[],
+  nameById: Map<string, string | null>,
+): ReviewThreadCommentRecord[] {
+  return comments.map((comment) => ({
+    ...comment,
+    authorName: comment.authorUserId
+      ? (nameById.get(comment.authorUserId) ?? null)
+      : null,
+  }))
+}
+
+/** Group comments by their thread id, preserving the given order. */
+export function groupCommentsByThreadId(
+  comments: ReviewThreadCommentRow[],
+): Map<string, ReviewThreadCommentRow[]> {
+  const byThread = new Map<string, ReviewThreadCommentRow[]>()
+  for (const comment of comments) {
+    const list = byThread.get(comment.threadId)
+    if (list) {
+      list.push(comment)
+    } else {
+      byThread.set(comment.threadId, [comment])
+    }
+  }
+  return byThread
+}
+
+/** Resolve display names for the given author ids in a single query. */
+async function fetchAuthorNames(
+  authorIds: string[],
+): Promise<Map<string, string | null>> {
   if (authorIds.length === 0) {
-    return comments.map((comment) => ({ ...comment, authorName: null }))
+    return new Map()
   }
 
   const db = getDb()
@@ -88,14 +122,18 @@ async function attachCommentAuthors(
     .select({ id: users.id, name: users.name })
     .from(users)
     .where(inArray(users.id, authorIds))
-  const nameById = new Map(authors.map((author) => [author.id, author.name]))
+  return new Map(authors.map((author) => [author.id, author.name]))
+}
 
-  return comments.map((comment) => ({
-    ...comment,
-    authorName: comment.authorUserId
-      ? (nameById.get(comment.authorUserId) ?? null)
-      : null,
-  }))
+/**
+ * Resolves each comment's author display name from the users table. Agent and
+ * authorless comments resolve to null; the UI renders those by author type.
+ */
+async function attachCommentAuthors(
+  comments: ReviewThreadCommentRow[],
+): Promise<ReviewThreadCommentRecord[]> {
+  const nameById = await fetchAuthorNames(collectCommentAuthorIds(comments))
+  return mapCommentsWithAuthors(comments, nameById)
 }
 
 /**
@@ -177,19 +215,27 @@ export async function listReviewThreadsForPullRequest(input: {
 
   if (threads.length === 0) return []
 
-  const withComments: ReviewThreadWithComments[] = []
-  for (const thread of threads) {
-    const comments = await db
-      .select()
-      .from(reviewThreadComments)
-      .where(eq(reviewThreadComments.threadId, thread.id))
-      .orderBy(asc(reviewThreadComments.createdAt))
-    withComments.push({
-      ...thread,
-      comments: await attachCommentAuthors(comments),
-    })
-  }
-  return withComments
+  // Batch: fetch every thread's comments in one query and all author names in
+  // one more, then group/attach in memory. Replaces the prior 1 + 2N
+  // sequential round-trips (a comments query and a users query per thread) —
+  // a real win on Neon serverless where each query carries network latency.
+  const threadIds = threads.map((thread) => thread.id)
+  const comments = await db
+    .select()
+    .from(reviewThreadComments)
+    .where(inArray(reviewThreadComments.threadId, threadIds))
+    .orderBy(asc(reviewThreadComments.createdAt))
+
+  const nameById = await fetchAuthorNames(collectCommentAuthorIds(comments))
+  const commentsByThread = groupCommentsByThreadId(comments)
+
+  return threads.map((thread) => ({
+    ...thread,
+    comments: mapCommentsWithAuthors(
+      commentsByThread.get(thread.id) ?? [],
+      nameById,
+    ),
+  }))
 }
 
 export async function getReviewThread(

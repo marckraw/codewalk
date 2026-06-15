@@ -2,9 +2,33 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   buildReviewThreadCommentRow,
   buildReviewThreadRow,
+  collectCommentAuthorIds,
+  groupCommentsByThreadId,
+  mapCommentsWithAuthors,
 } from './review-threads'
+import type { ReviewThreadCommentRow } from './schema'
 
 vi.mock('server-only', () => ({}))
+
+function comment(
+  overrides: Partial<ReviewThreadCommentRow> & {
+    id: string
+    threadId: string
+  },
+): ReviewThreadCommentRow {
+  return {
+    authorType: 'user',
+    authorUserId: null,
+    body: '',
+    agentState: null,
+    agentSeqStart: null,
+    commentKind: 'message',
+    fixState: null,
+    commitSha: null,
+    createdAt: new Date('2026-06-15T00:00:00Z'),
+    ...overrides,
+  } as unknown as ReviewThreadCommentRow
+}
 
 describe('buildReviewThreadRow', () => {
   it('lowercases the repository identity and keeps anchor fields', () => {
@@ -112,5 +136,56 @@ describe('buildReviewThreadCommentRow', () => {
       commitSha: 'abc1234',
       fixState: null,
     })
+  })
+})
+
+describe('collectCommentAuthorIds', () => {
+  it('returns unique non-null author ids', () => {
+    expect(
+      collectCommentAuthorIds([
+        comment({ id: 'c1', threadId: 't1', authorUserId: 'u1' }),
+        comment({ id: 'c2', threadId: 't1', authorUserId: 'u1' }),
+        comment({ id: 'c3', threadId: 't1', authorUserId: null }),
+        comment({ id: 'c4', threadId: 't2', authorUserId: 'u2' }),
+      ]),
+    ).toEqual(['u1', 'u2'])
+  })
+
+  it('is empty when no comment has an author', () => {
+    expect(
+      collectCommentAuthorIds([comment({ id: 'c1', threadId: 't1' })]),
+    ).toEqual([])
+  })
+})
+
+describe('mapCommentsWithAuthors', () => {
+  it('resolves names and leaves authorless/unknown comments null', () => {
+    const nameById = new Map<string, string | null>([
+      ['u1', 'Ada'],
+      ['u2', null],
+    ])
+    const result = mapCommentsWithAuthors(
+      [
+        comment({ id: 'c1', threadId: 't1', authorUserId: 'u1' }),
+        comment({ id: 'c2', threadId: 't1', authorUserId: 'u2' }),
+        comment({ id: 'c3', threadId: 't1', authorUserId: 'u-missing' }),
+        comment({ id: 'c4', threadId: 't1', authorUserId: null }),
+      ],
+      nameById,
+    )
+    expect(result.map((c) => c.authorName)).toEqual(['Ada', null, null, null])
+  })
+})
+
+describe('groupCommentsByThreadId', () => {
+  it('groups comments by thread id preserving order', () => {
+    const grouped = groupCommentsByThreadId([
+      comment({ id: 'c1', threadId: 't1' }),
+      comment({ id: 'c2', threadId: 't2' }),
+      comment({ id: 'c3', threadId: 't1' }),
+    ])
+    expect(grouped.get('t1')?.map((c) => c.id)).toEqual(['c1', 'c3'])
+    expect(grouped.get('t2')?.map((c) => c.id)).toEqual(['c2'])
+    expect(grouped.get('t3')).toBeUndefined()
   })
 })
