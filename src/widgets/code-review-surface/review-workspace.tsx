@@ -34,6 +34,10 @@ import { GuideEmptyPane } from './guide-empty-pane'
 import { GuidePreparingPane } from './guide-preparing-pane'
 import { GuideRail } from './guide-rail'
 import { GuideView } from './guide-view'
+import {
+  GUIDE_OVERVIEW_SECTION_ID,
+  hasGuideOverview,
+} from './guide-overview.pure'
 import { ModeButton } from './mode-button'
 import { PierreDiffViewer } from './pierre-diff-viewer'
 import { PinnedDiscussionComposer } from './pinned-discussion-composer.presentational'
@@ -96,16 +100,28 @@ export function ReviewWorkspace({
   const [activeGuideSectionId, setActiveGuideSectionId] = useState<
     string | null
   >(() => {
-    if (
-      deepLink.sectionId &&
-      initialWorkspace.guide?.sections.some(
-        (section) => section.id === deepLink.sectionId,
-      )
-    ) {
-      return deepLink.sectionId
+    const guide = initialWorkspace.guide
+    const overviewAvailable = hasGuideOverview(guide?.overview)
+
+    if (deepLink.sectionId) {
+      if (
+        deepLink.sectionId === GUIDE_OVERVIEW_SECTION_ID &&
+        overviewAvailable
+      ) {
+        return deepLink.sectionId
+      }
+      if (
+        guide?.sections.some((section) => section.id === deepLink.sectionId)
+      ) {
+        return deepLink.sectionId
+      }
     }
 
-    return initialWorkspace.guide?.sections[0]?.id ?? null
+    if (overviewAvailable) {
+      return GUIDE_OVERVIEW_SECTION_ID
+    }
+
+    return guide?.sections[0]?.id ?? null
   })
   const guideSectionRefs = useRef(new Map<string, HTMLElement>())
   const guideFileRefs = useRef(new Map<string, HTMLElement>())
@@ -159,20 +175,27 @@ export function ReviewWorkspace({
     [selectedFile, visibleFiles],
   )
   const effectiveActiveGuideSectionId = useMemo(() => {
-    if (!workspace.guide || workspace.guide.sections.length === 0) {
+    const guide = workspace.guide
+    if (!guide) {
       return null
     }
 
+    const overviewAvailable = hasGuideOverview(guide.overview)
+
     if (
       activeGuideSectionId &&
-      workspace.guide.sections.some(
-        (section) => section.id === activeGuideSectionId,
-      )
+      (guide.sections.some((section) => section.id === activeGuideSectionId) ||
+        (overviewAvailable &&
+          activeGuideSectionId === GUIDE_OVERVIEW_SECTION_ID))
     ) {
       return activeGuideSectionId
     }
 
-    return workspace.guide.sections[0].id
+    if (overviewAvailable) {
+      return GUIDE_OVERVIEW_SECTION_ID
+    }
+
+    return guide.sections[0]?.id ?? null
   }, [activeGuideSectionId, workspace.guide])
   const diffByPath = useMemo(
     () => new Map(workspace.files.map((file) => [file.path, file.patch ?? ''])),
@@ -373,15 +396,23 @@ export function ReviewWorkspace({
       return
     }
 
-    const observedSections = workspace.guide.sections
-      .map((section) => ({
+    const observedSections = [
+      ...(hasGuideOverview(workspace.guide.overview)
+        ? [
+            {
+              id: GUIDE_OVERVIEW_SECTION_ID,
+              node: guideSectionRefs.current.get(GUIDE_OVERVIEW_SECTION_ID),
+            },
+          ]
+        : []),
+      ...workspace.guide.sections.map((section) => ({
         id: section.id,
         node: guideSectionRefs.current.get(section.id),
-      }))
-      .filter(
-        (entry): entry is { id: string; node: HTMLElement } =>
-          entry.node !== undefined,
-      )
+      })),
+    ].filter(
+      (entry): entry is { id: string; node: HTMLElement } =>
+        entry.node !== undefined,
+    )
 
     if (observedSections.length === 0) {
       return

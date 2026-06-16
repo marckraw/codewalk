@@ -8,6 +8,10 @@ import {
 import { CodeReviewGuideGenerationControl } from '@/features/code-review-guide-generation-control'
 import { Button } from '@/shared/ui/button'
 import { cn } from '@/shared/lib/cn.pure'
+import {
+  GUIDE_OVERVIEW_SECTION_ID,
+  hasGuideOverview,
+} from './guide-overview.pure'
 import type { ReviewWorkspace } from './review-types'
 
 interface GuideRailProps {
@@ -30,6 +34,8 @@ export function GuideRail({
   workspace,
 }: GuideRailProps) {
   const sectionCount = workspace.guide?.sections.length ?? 0
+  const showOverview = hasGuideOverview(workspace.guide?.overview)
+  const overviewActive = activeSectionId === GUIDE_OVERVIEW_SECTION_ID
 
   return (
     <aside className="flex min-h-0 flex-col border-b border-border lg:border-r lg:border-b-0">
@@ -88,10 +94,36 @@ export function GuideRail({
             })}
           </div>
           <div className="app-scrollbar min-h-0 flex-1 overflow-y-auto p-2">
-            {!workspace.guide || workspace.guide.sections.length === 0 ? (
+            {(!workspace.guide || workspace.guide.sections.length === 0) &&
+            !showOverview ? (
               <p className="px-2 py-3 text-sm text-muted-foreground">
                 No guide sections yet.
               </p>
+            ) : null}
+            {showOverview ? (
+              <Button
+                className={cn(
+                  'mb-1 flex h-auto min-h-[58px] w-full min-w-0 items-start justify-start gap-2 whitespace-normal rounded-md border px-2.5 py-2 text-left transition-colors',
+                  overviewActive
+                    ? 'border-primary/50 bg-primary/10'
+                    : 'border-transparent hover:border-border hover:bg-[var(--panel-subtle)]',
+                )}
+                onClick={() => onSelectSection(GUIDE_OVERVIEW_SECTION_ID)}
+                type="button"
+                variant="ghost"
+              >
+                <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded border border-primary/40 bg-primary/10 text-[10px] font-medium text-primary">
+                  00
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm leading-5 font-medium">
+                    Overview
+                  </span>
+                  <span className="block text-xs leading-4 text-muted-foreground">
+                    Start here · the gist
+                  </span>
+                </span>
+              </Button>
             ) : null}
             {workspace.guide?.sections.map((section, index) => {
               const active = activeSectionId === section.id
