@@ -160,6 +160,21 @@ function makeWorkspace(): ReviewWorkspaceModel {
   } as unknown as ReviewWorkspaceModel
 }
 
+function makeWorkspaceWithOverview(): ReviewWorkspaceModel {
+  const base = makeWorkspace()
+  const guide = base.guide as NonNullable<ReviewWorkspaceModel['guide']>
+
+  return {
+    ...base,
+    guide: {
+      ...guide,
+      overview:
+        'Reconciles in-flight generations so the dashboard list is never stale.',
+      pullRequest: { title: 'Reconcile stale generation status' },
+    },
+  } as unknown as ReviewWorkspaceModel
+}
+
 describe('ReviewWorkspace', () => {
   beforeEach(() => {
     mockedCreateReviewThread.mockReset()
@@ -184,6 +199,43 @@ describe('ReviewWorkspace', () => {
       screen.getByRole('heading', { name: 'First section' }),
     ).toBeInTheDocument()
     expect(screen.queryByTestId('file-tree')).not.toBeInTheDocument()
+  })
+
+  it('grounds the reviewer with a 00 overview section when the guide has an overview', () => {
+    render(
+      <ReviewWorkspace
+        autoGenerate={false}
+        workspace={makeWorkspaceWithOverview()}
+      />,
+    )
+
+    // Main pane: the PR title heads the overview, with its prose, above the
+    // numbered sections.
+    expect(
+      screen.getByRole('heading', {
+        name: 'Reconcile stale generation status',
+      }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Reconciles in-flight generations so the dashboard list is never stale.',
+      ),
+    ).toBeInTheDocument()
+
+    // Rail: a dedicated "00" Overview entry sits before the real sections,
+    // which keep their own numbering.
+    expect(screen.getByRole('button', { name: /Overview/ })).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'First section' }),
+    ).toBeInTheDocument()
+  })
+
+  it('omits the overview section when the guide has no overview', () => {
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    expect(
+      screen.queryByRole('button', { name: /Overview/ }),
+    ).not.toBeInTheDocument()
   })
 
   it('collapses and restores the guide section list', async () => {

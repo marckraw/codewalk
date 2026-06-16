@@ -72,7 +72,9 @@ describe('ReviewSnapshotPage', () => {
       }),
     )
 
-    expect(screen.getByText('Add guided review')).toBeInTheDocument()
+    // The PR title heads both the workspace header and the new "00" overview
+    // section, so it legitimately appears more than once.
+    expect(screen.getAllByText('Add guided review').length).toBeGreaterThan(0)
     expect(screen.getByText(/ef-global\/example/)).toBeInTheDocument()
     expect(
       screen.getAllByRole('button', { name: /Guide/ }).length,

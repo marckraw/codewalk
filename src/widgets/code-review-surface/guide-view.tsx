@@ -1,8 +1,14 @@
 import type { ReactNode } from 'react'
 import type { DiffLineAnnotation, SelectedLineRange } from '@pierre/diffs'
+import { Sparkles } from 'lucide-react'
 import { Button } from '@/shared/ui/button'
 import { MarkdownText } from './markdown'
 import { GuideFileDiff } from './guide-file-diff'
+import {
+  GUIDE_OVERVIEW_SECTION_ID,
+  guideOverviewTitle,
+  hasGuideOverview,
+} from './guide-overview.pure'
 import { RiskBadge } from './risk-badge'
 import type { ReviewGuide, ReviewGuideSection } from './review-types'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
@@ -39,7 +45,9 @@ export function GuideView({
   renderFileRef,
   renderSectionRef,
 }: GuideViewProps) {
-  if (guide.sections.length === 0) {
+  const showOverview = hasGuideOverview(guide.overview)
+
+  if (guide.sections.length === 0 && !showOverview) {
     return (
       <div className="flex h-full items-center justify-center p-3 text-center text-xs text-muted-foreground">
         No changed files detected for this guide.
@@ -50,6 +58,7 @@ export function GuideView({
   return (
     <main className="app-scrollbar h-full min-w-0 overflow-y-auto bg-background">
       <div className="flex min-h-full flex-col">
+        {showOverview ? renderOverviewSection(guide, renderSectionRef) : null}
         {guide.sections.map((section, index) => (
           <section
             key={section.id}
@@ -120,6 +129,47 @@ export function GuideView({
         ))}
       </div>
     </main>
+  )
+}
+
+/**
+ * The "00" grounding pane. It sits above the numbered sections and surfaces the
+ * guide's whole-PR overview so the reviewer knows what the change is for before
+ * walking the per-file sections. Unlike a real section it carries no risk, files,
+ * or checklist, so it renders full-width with an intro marker instead of a risk
+ * badge — but it registers the same section ref so rail selection, scrolling,
+ * active-tracking, and deep-linking treat it like any other section.
+ */
+function renderOverviewSection(
+  guide: ReviewGuide,
+  renderSectionRef: (sectionId: string) => (node: HTMLElement | null) => void,
+): ReactNode {
+  return (
+    <section
+      ref={renderSectionRef(GUIDE_OVERVIEW_SECTION_ID)}
+      className="min-w-0 scroll-mt-0 border-b border-border px-5 py-5"
+    >
+      <div className="max-w-3xl">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-[11px] font-medium text-muted-foreground">
+              {`00 / ${String(guide.sections.length).padStart(2, '0')}`}
+            </p>
+            <h2 className="mt-3 text-2xl leading-8 font-semibold">
+              {guideOverviewTitle(guide.pullRequest)}
+            </h2>
+          </div>
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border bg-[var(--panel-subtle)] px-2 py-0.5 text-[10px] font-medium tracking-wide text-muted-foreground uppercase">
+            <Sparkles className="size-3" />
+            Overview
+          </span>
+        </div>
+        <MarkdownText
+          className="mt-5 text-sm leading-7 text-foreground"
+          content={guide.overview}
+        />
+      </div>
+    </section>
   )
 }
 
