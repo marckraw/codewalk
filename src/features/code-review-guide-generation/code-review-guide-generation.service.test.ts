@@ -5,6 +5,7 @@ import {
   buildRepositoryUrlFromSnapshot,
   finalizeCodeReviewGuideGenerationFromJob,
   reconcileCodeReviewGuideGenerationForSnapshot,
+  reconcileInFlightCodeReviewGuideGenerations,
   startCodeReviewGuideGenerationRun,
 } from './code-review-guide-generation.service'
 
@@ -26,6 +27,7 @@ vi.mock('@/entities/database', () => ({
   attachDaemonJobToCodeReviewGuideGeneration: vi.fn(),
   finishCodeReviewGuideGeneration: vi.fn(),
   getCodeReviewGuideGenerationBySnapshotId: vi.fn(),
+  listRunningCodeReviewGuideGenerationSnapshotIds: vi.fn(),
   getPullRequestSnapshotById: vi.fn(),
   persistCodeReviewGuide: vi.fn(),
   startCodeReviewGuideGeneration: vi.fn(),
@@ -48,6 +50,7 @@ import {
   attachDaemonJobToCodeReviewGuideGeneration,
   finishCodeReviewGuideGeneration,
   getCodeReviewGuideGenerationBySnapshotId,
+  listRunningCodeReviewGuideGenerationSnapshotIds,
   getPullRequestSnapshotById,
   persistCodeReviewGuide,
   startCodeReviewGuideGeneration,
@@ -74,6 +77,37 @@ describe('buildRepositoryUrlFromSnapshot', () => {
     expect(
       buildRepositoryUrlFromSnapshot({ owner: 'ef-global', repo: 'example' }),
     ).toBe('https://github.com/ef-global/example')
+  })
+})
+
+describe('reconcileInFlightCodeReviewGuideGenerations', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('reconciles every running generation', async () => {
+    vi.mocked(
+      listRunningCodeReviewGuideGenerationSnapshotIds,
+    ).mockResolvedValue(['s1', 's2'])
+    // A null generation makes each per-snapshot reconcile short-circuit before
+    // any daemon call, so we only assert the fan-out happened.
+    vi.mocked(getCodeReviewGuideGenerationBySnapshotId).mockResolvedValue(null)
+
+    await reconcileInFlightCodeReviewGuideGenerations()
+
+    expect(getCodeReviewGuideGenerationBySnapshotId).toHaveBeenCalledWith('s1')
+    expect(getCodeReviewGuideGenerationBySnapshotId).toHaveBeenCalledWith('s2')
+    expect(getCodeReviewGuideGenerationBySnapshotId).toHaveBeenCalledTimes(2)
+  })
+
+  it('does nothing when no generation is running', async () => {
+    vi.mocked(
+      listRunningCodeReviewGuideGenerationSnapshotIds,
+    ).mockResolvedValue([])
+
+    await reconcileInFlightCodeReviewGuideGenerations()
+
+    expect(getCodeReviewGuideGenerationBySnapshotId).not.toHaveBeenCalled()
   })
 })
 

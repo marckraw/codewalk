@@ -14,6 +14,7 @@ import {
   attachDaemonJobToCodeReviewGuideGeneration,
   finishCodeReviewGuideGeneration,
   getCodeReviewGuideGenerationBySnapshotId,
+  listRunningCodeReviewGuideGenerationSnapshotIds,
   startCodeReviewGuideGeneration,
   type CodeReviewGuideGenerationRow,
   type FinishCodeReviewGuideGenerationInput,
@@ -314,6 +315,28 @@ export async function reconcileCodeReviewGuideGenerationForSnapshot(
     })
     return { action: 'none', reason: 'daemon-unavailable' }
   }
+}
+
+/**
+ * Reconcile every still-`running` generation against the daemon. The dashboard
+ * calls this before listing so the list self-heals exactly like the detail page
+ * — without it, a job the daemon already finished lingers as `running` until
+ * the staleness threshold flips it to a misleading `failed`. Cheap when idle:
+ * the per-snapshot reconcile short-circuits non-running/no-job/too-fresh rows,
+ * and there are usually only a handful of running generations. Never throws.
+ */
+export async function reconcileInFlightCodeReviewGuideGenerations(): Promise<void> {
+  const snapshotIds = await listRunningCodeReviewGuideGenerationSnapshotIds()
+
+  if (snapshotIds.length === 0) {
+    return
+  }
+
+  await Promise.all(
+    snapshotIds.map((snapshotId) =>
+      reconcileCodeReviewGuideGenerationForSnapshot(snapshotId),
+    ),
+  )
 }
 
 /**
