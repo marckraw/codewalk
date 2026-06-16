@@ -186,6 +186,34 @@ describe('ReviewWorkspace', () => {
     expect(screen.queryByTestId('file-tree')).not.toBeInTheDocument()
   })
 
+  it('collapses and restores the guide section list', async () => {
+    const user = userEvent.setup()
+    render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
+
+    expect(
+      screen.getByRole('button', { name: /First section/ }),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Hide guide sections' }),
+    )
+
+    expect(
+      screen.queryByRole('button', { name: /First section/ }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'First section' }),
+    ).toBeInTheDocument()
+
+    await user.click(
+      screen.getByRole('button', { name: 'Show guide sections' }),
+    )
+
+    expect(
+      screen.getByRole('button', { name: /First section/ }),
+    ).toBeInTheDocument()
+  })
+
   it('switches to the diff view and shows the selected file', async () => {
     const user = userEvent.setup()
     render(<ReviewWorkspace autoGenerate={false} workspace={makeWorkspace()} />)
@@ -237,7 +265,7 @@ describe('ReviewWorkspace', () => {
     await user.click(screen.getByRole('button', { name: /Diff/ }))
 
     expect(await screen.findByText(/Thread on new line 1/)).toBeInTheDocument()
-    expect(screen.getByText('Why did this change?')).toBeInTheDocument()
+    expect(await screen.findByText('Why did this change?')).toBeInTheDocument()
   })
 
   it('creates a review thread from a selected diff line', async () => {
