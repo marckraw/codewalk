@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
+import { cn } from '@/shared/lib/cn.pure'
 import {
   addReviewThreadComment,
   approveReviewThreadFix,
@@ -79,6 +80,8 @@ export function ReviewWorkspace({
         ? 'guide'
         : 'diff'),
   )
+  const [guideSectionListCollapsed, setGuideSectionListCollapsed] =
+    useState(false)
   const [selectedFile, setSelectedFile] = useState<string | null>(() => {
     if (
       deepLink.filePath &&
@@ -1098,7 +1101,14 @@ export function ReviewWorkspace({
           onBrowseDiff={() => setSelectedView('diff')}
         />
       ) : (
-        <div className="relative grid min-h-0 flex-1 grid-rows-[minmax(180px,280px)_minmax(0,1fr)] overflow-hidden lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-1">
+        <div
+          className={cn(
+            'relative grid min-h-0 flex-1 overflow-hidden',
+            selectedView === 'guide' && guideSectionListCollapsed
+              ? 'grid-rows-[40px_minmax(0,1fr)] lg:grid-cols-[56px_minmax(0,1fr)] lg:grid-rows-1'
+              : 'grid-rows-[minmax(180px,280px)_minmax(0,1fr)] lg:grid-cols-[320px_minmax(0,1fr)] lg:grid-rows-1',
+          )}
+        >
           {selectedView === 'guide' ? (
             <>
               <GuideRail
@@ -1106,6 +1116,10 @@ export function ReviewWorkspace({
                 autoGenerate={autoGenerate}
                 onGenerationStart={markGenerationStarted}
                 onSelectSection={handleSelectGuideSection}
+                onToggleSectionList={() =>
+                  setGuideSectionListCollapsed((collapsed) => !collapsed)
+                }
+                sectionListCollapsed={guideSectionListCollapsed}
                 workspace={workspace}
               />
               {workspace.state === 'preparing' ? (
