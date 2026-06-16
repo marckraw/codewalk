@@ -1,10 +1,11 @@
 import { Slot } from '@radix-ui/react-slot'
 import type { ButtonHTMLAttributes } from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
+import { Loader2 } from 'lucide-react'
 import { cn } from '@/shared/lib/cn.pure'
 
 const buttonVariants = cva(
-  'inline-flex shrink-0 items-center gap-2 rounded-md font-medium outline-none transition disabled:pointer-events-none disabled:opacity-55',
+  'inline-flex shrink-0 items-center gap-2 rounded-md font-medium outline-none transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-55',
   {
     defaultVariants: {
       size: 'md',
@@ -33,21 +34,44 @@ const buttonVariants = cva(
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> &
   VariantProps<typeof buttonVariants> & {
     asChild?: boolean
+    /** Show a leading spinner and disable the button while an action runs.
+     *  Ignored when `asChild` (a Slot must keep a single child). */
+    pending?: boolean
   }
 
 export function Button({
   asChild = false,
+  children,
   className,
+  disabled,
+  pending = false,
   size = 'md',
   variant = 'secondary',
   ...props
 }: ButtonProps) {
   const Component = asChild ? Slot : 'button'
+  const showSpinner = !asChild && pending
 
   return (
     <Component
+      aria-busy={showSpinner || undefined}
       className={cn(buttonVariants({ size, variant }), className)}
+      disabled={disabled || showSpinner || undefined}
       {...props}
-    />
+    >
+      {asChild ? (
+        children
+      ) : (
+        <>
+          {showSpinner ? (
+            <Loader2
+              aria-hidden="true"
+              className="size-3.5 shrink-0 animate-spin"
+            />
+          ) : null}
+          {children}
+        </>
+      )}
+    </Component>
   )
 }

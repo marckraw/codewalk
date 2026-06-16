@@ -15,6 +15,7 @@ import { AnimatedStatus } from '@/shared/ui/animated-status'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
 import { StreamingMarkdown } from '@/shared/ui/streaming-markdown'
+import { cn } from '@/shared/lib/cn.pure'
 import { describeReviewAgentActivity } from './review-agent-activity.pure'
 import { ThreadExcerpt } from './thread-excerpt.presentational'
 import type { ReviewThreadAnnotationData } from './review-thread-annotation.types'
@@ -175,7 +176,13 @@ export function PersistedReviewThreadAnnotation({
           const isActing = annotation.fixActionCommentId === comment.id
 
           return (
-            <li className="grid min-w-0 gap-1 px-3 py-2" key={comment.id}>
+            <li
+              className={cn(
+                'grid min-w-0 gap-1 px-3 py-2',
+                comment.pending ? 'opacity-60' : undefined,
+              )}
+              key={comment.id}
+            >
               <div className="flex items-center gap-1.5 text-[11px] font-medium text-[var(--muted)]">
                 {comment.authorType === 'agent' ? (
                   <Bot aria-hidden="true" className="size-3.5" />
