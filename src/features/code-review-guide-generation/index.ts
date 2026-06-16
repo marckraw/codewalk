@@ -3,6 +3,7 @@ export {
   buildRepositoryUrlFromSnapshot,
   finalizeCodeReviewGuideGenerationFromJob,
   reconcileCodeReviewGuideGenerationForSnapshot,
+  reconcileInFlightCodeReviewGuideGenerations,
   startCodeReviewGuideGenerationRun,
   type GenerateCodeReviewGuideInput,
   type ReconcileCodeReviewGuideGenerationResult,

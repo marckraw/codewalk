@@ -6,10 +6,19 @@ import { EmptyState } from '@/shared/ui/empty-state'
 import { Panel, PanelHeader } from '@/shared/ui/panel'
 import { getCurrentCodewalkUser } from '@/entities/auth-server'
 import { listReviewWorkspaces } from '@/entities/database'
+import { reconcileInFlightCodeReviewGuideGenerations } from '@/features/code-review-guide-generation'
 
 export default async function Home() {
   const user = await getCurrentCodewalkUser()
   const isAuthenticated = user.status === 'authenticated'
+
+  // Ground-truth check before listing: pull the daemon's status for any
+  // still-running generation so the list reflects finished jobs instead of a
+  // stale `failed`, the same way the review detail page reconciles on load.
+  if (isAuthenticated) {
+    await reconcileInFlightCodeReviewGuideGenerations()
+  }
+
   const workspaces = isAuthenticated ? await listReviewWorkspaces() : []
 
   return (

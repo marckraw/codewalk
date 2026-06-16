@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { eq } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { getDb } from './client'
 import {
   codeReviewGuideGenerations,
@@ -108,6 +108,26 @@ export async function startCodeReviewGuideGeneration(
     .returning()
 
   return generation
+}
+
+/**
+ * Snapshot ids whose generation is still `running`. The dashboard reconciles
+ * these against the daemon before listing so a finished-but-unreconciled job
+ * doesn't linger as a stale `failed` row. Bounded so a backlog can't fan out
+ * into an unbounded number of daemon calls on a single dashboard load.
+ */
+export async function listRunningCodeReviewGuideGenerationSnapshotIds(
+  limit = 25,
+): Promise<string[]> {
+  const db = getDb()
+  const rows = await db
+    .select({ snapshotId: codeReviewGuideGenerations.snapshotId })
+    .from(codeReviewGuideGenerations)
+    .where(eq(codeReviewGuideGenerations.status, 'running'))
+    .orderBy(desc(codeReviewGuideGenerations.startedAt))
+    .limit(limit)
+
+  return rows.map((row) => row.snapshotId)
 }
 
 export async function getCodeReviewGuideGenerationBySnapshotId(
