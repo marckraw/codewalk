@@ -67,12 +67,19 @@ export type ListReviewThreadsParams = {
 export type CreateReviewThreadInput = ListReviewThreadsParams & {
   anchorSnapshotId: string | null
   anchorCommitSha: string
-  filePath: string
-  side: ReviewThreadDiffSide
-  lineStart: number
-  lineEnd: number
-  excerpt: string
+  // Anchor columns are optional: a general (anchorless) discussion omits them
+  // and the server fills empty sentinels. Inline threads always provide them.
+  filePath?: string
+  side?: ReviewThreadDiffSide
+  lineStart?: number
+  lineEnd?: number
+  excerpt?: string
   extraAnchors?: ReviewThreadAnchorRef[]
   kind?: ReviewThreadKind
   body: string
+}
+
+export type AttachReviewThreadAnchorsInput = {
+  anchors: ReviewThreadAnchorRef[]
+  threadId: string
 }

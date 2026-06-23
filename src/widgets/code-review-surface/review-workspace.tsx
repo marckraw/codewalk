@@ -14,6 +14,7 @@ import { cn } from '@/shared/lib/cn.pure'
 import {
   addReviewThreadComment,
   approveReviewThreadFix,
+  attachReviewThreadAnchors,
   buildReviewThreadSelectionAnchor,
   createReviewThread,
   discardReviewThreadFix,
@@ -142,6 +143,18 @@ export function ReviewWorkspace({
   const [discussionBody, setDiscussionBody] = useState('')
   const [discussionError, setDiscussionError] = useState<string | null>(null)
   const [isPostingDiscussion, setIsPostingDiscussion] = useState(false)
+  // null = the pinned selections start a new discussion; otherwise the id of an
+  // existing discussion they get attached to.
+  const [discussionTargetThreadId, setDiscussionTargetThreadId] = useState<
+    string | null
+  >(null)
+  // Anchorless "start a discussion" composer in the Discussions tab.
+  const [isComposerOpen, setIsComposerOpen] = useState(false)
+  const [newDiscussionBody, setNewDiscussionBody] = useState('')
+  const [newDiscussionError, setNewDiscussionError] = useState<string | null>(
+    null,
+  )
+  const [isPostingNewDiscussion, setIsPostingNewDiscussion] = useState(false)
   const [replyBodies, setReplyBodies] = useState<Record<string, string>>({})
   const [threadErrors, setThreadErrors] = useState<Record<string, string>>({})
   const [replyingThreadId, setReplyingThreadId] = useState<string | null>(null)
@@ -925,7 +938,58 @@ export function ReviewWorkspace({
     setPinnedAnchors([])
     setDiscussionBody('')
     setDiscussionError(null)
+    setDiscussionTargetThreadId(null)
   }, [])
+
+  const closeDiscussionComposer = useCallback(() => {
+    setIsComposerOpen(false)
+    setNewDiscussionBody('')
+    setNewDiscussionError(null)
+  }, [])
+
+  /**
+   * Start a whole-PR discussion with no anchors. The agent answers with full
+   * pull-request context; selections can be attached later from the diff.
+   */
+  const startGeneralDiscussion = useCallback(async () => {
+    const body = newDiscussionBody.trim()
+
+    if (!body) {
+      setNewDiscussionError('Enter a question to start a discussion.')
+      return
+    }
+
+    setNewDiscussionError(null)
+    setIsPostingNewDiscussion(true)
+
+    try {
+      const thread = await createReviewThread({
+        anchorCommitSha: workspace.snapshot.headSha,
+        anchorSnapshotId: workspace.snapshot.id,
+        body,
+        kind: 'discussion',
+        number: workspace.snapshot.number,
+        owner: workspace.snapshot.owner,
+        repo: workspace.snapshot.repo,
+      })
+      setReviewThreads((current) => [thread, ...current])
+      setNewDiscussionBody('')
+      setIsComposerOpen(false)
+      void runAgentReplyForThread(thread.id)
+    } catch (error) {
+      setNewDiscussionError(reviewThreadErrorMessage(error))
+    } finally {
+      setIsPostingNewDiscussion(false)
+    }
+  }, [
+    newDiscussionBody,
+    runAgentReplyForThread,
+    workspace.snapshot.headSha,
+    workspace.snapshot.id,
+    workspace.snapshot.number,
+    workspace.snapshot.owner,
+    workspace.snapshot.repo,
+  ])
 
   // Create a discussion thread from the pinned selections: the first pin is the
   // primary anchor, the rest ride along as extraAnchors, and the agent prompt
@@ -933,6 +997,31 @@ export function ReviewWorkspace({
   const submitPinnedDiscussion = useCallback(async () => {
     if (pinnedAnchors.length === 0) {
       setDiscussionError('Pin at least one selection first.')
+      return
+    }
+
+    // Attach the pins to an existing discussion instead of starting a new one.
+    if (discussionTargetThreadId) {
+      setDiscussionError(null)
+      setIsPostingDiscussion(true)
+
+      try {
+        const updated = await attachReviewThreadAnchors({
+          anchors: pinnedAnchors,
+          threadId: discussionTargetThreadId,
+        })
+        setReviewThreads((current) =>
+          current.map((thread) =>
+            thread.id === updated.id ? updated : thread,
+          ),
+        )
+        clearPinnedDiscussion()
+        setSelectedView('discussions')
+      } catch (error) {
+        setDiscussionError(reviewThreadErrorMessage(error))
+      } finally {
+        setIsPostingDiscussion(false)
+      }
       return
     }
 
@@ -976,6 +1065,7 @@ export function ReviewWorkspace({
   }, [
     clearPinnedDiscussion,
     discussionBody,
+    discussionTargetThreadId,
     pinnedAnchors,
     runAgentReplyForThread,
     workspace.snapshot.id,
@@ -983,6 +1073,15 @@ export function ReviewWorkspace({
     workspace.snapshot.owner,
     workspace.snapshot.repo,
   ])
+
+  const discussionTargets = useMemo(
+    () =>
+      discussionThreads.map((thread) => ({
+        id: thread.id,
+        label: discussionTargetLabel(thread),
+      })),
+    [discussionThreads],
+  )
 
   const draftAnnotation = useMemo(
     () =>
@@ -1174,19 +1273,32 @@ export function ReviewWorkspace({
       {pinnedAnchors.length > 0 ? (
         <PinnedDiscussionComposer
           body={discussionBody}
+          discussions={discussionTargets}
           error={discussionError}
           isSubmitting={isPostingDiscussion}
           onBodyChange={setDiscussionBody}
           onClear={clearPinnedDiscussion}
           onRemovePin={removePinnedAnchor}
           onSubmit={submitPinnedDiscussion}
+          onTargetChange={setDiscussionTargetThreadId}
           pins={pinnedAnchors}
+          targetThreadId={discussionTargetThreadId}
         />
       ) : null}
 
       {selectedView === 'discussions' ? (
         <DiscussionsView
           annotations={discussionAnnotations}
+          composer={{
+            body: newDiscussionBody,
+            error: newDiscussionError,
+            isSubmitting: isPostingNewDiscussion,
+            open: isComposerOpen,
+            onBodyChange: setNewDiscussionBody,
+            onCancel: closeDiscussionComposer,
+            onOpen: () => setIsComposerOpen(true),
+            onSubmit: startGeneralDiscussion,
+          }}
           onBrowseDiff={() => setSelectedView('diff')}
         />
       ) : (
@@ -1399,6 +1511,22 @@ function buildOptimisticUserComment(
 
 function reviewThreadErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : 'Review threads unavailable.'
+}
+
+/**
+ * A short label for a discussion in the attach-target picker: its opening
+ * question, truncated, with a generic fallback.
+ */
+function discussionTargetLabel(thread: ReviewThread): string {
+  const opening = thread.comments
+    .find((comment) => comment.authorType === 'user' && comment.body.trim())
+    ?.body.trim()
+
+  if (!opening) {
+    return 'Discussion'
+  }
+
+  return opening.length > 48 ? `${opening.slice(0, 47)}…` : opening
 }
 
 /**

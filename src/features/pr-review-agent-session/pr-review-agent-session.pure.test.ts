@@ -3,6 +3,7 @@ import {
   buildPullRequestReviewAgentInitialPrompt,
   buildPullRequestReviewAgentSessionId,
   buildReviewThreadAgentFixPrompt,
+  buildReviewThreadAgentGeneralQuestionPrompt,
   buildReviewThreadAgentQuestionPrompt,
   extractAgentReplyAfterLastUserMessage,
 } from './pr-review-agent-session.pure'
@@ -52,6 +53,20 @@ describe('PR review agent session helpers', () => {
 
     expect(prompt).toContain('Refactors the auth middleware.')
     expect(prompt).toContain('- Auth: Token checks moved')
+  })
+
+  it('builds a general PR question prompt without any anchor', () => {
+    const prompt = buildReviewThreadAgentGeneralQuestionPrompt({
+      history: [{ authorType: 'user', body: 'Earlier question' }],
+      question: "What's the riskiest change here?",
+    })
+
+    expect(prompt).toContain('general question about this pull request')
+    expect(prompt).not.toContain('File:')
+    expect(prompt).not.toContain('Selected lines:')
+    expect(prompt).toContain('Reviewer: Earlier question')
+    expect(prompt).toContain("Question: What's the riskiest change here?")
+    expect(prompt).toContain('Do not modify any files.')
   })
 
   it('builds an anchored question prompt with excerpt and history', () => {

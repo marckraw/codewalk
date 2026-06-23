@@ -345,6 +345,36 @@ export async function listOpenReviewThreadRowsForPullRequest(input: {
     )
 }
 
+/**
+ * Appends diff selections to a thread's reference list (P6 discussions: anchors
+ * attached after the conversation started). Returns the full updated thread, or
+ * null when the thread no longer exists. New anchors land in `extraAnchors`; for
+ * a general discussion that list is the entire selection set.
+ */
+export async function appendReviewThreadAnchors(input: {
+  anchors: ReviewThreadAnchorRef[]
+  threadId: string
+}): Promise<ReviewThreadWithComments | null> {
+  if (input.anchors.length === 0) {
+    return getReviewThread(input.threadId)
+  }
+
+  const db = getDb()
+  const existing = await getReviewThread(input.threadId)
+
+  if (!existing) {
+    return null
+  }
+
+  const nextAnchors = [...(existing.extraAnchors ?? []), ...input.anchors]
+  await db
+    .update(reviewThreads)
+    .set({ extraAnchors: nextAnchors, updatedAt: new Date() })
+    .where(eq(reviewThreads.id, input.threadId))
+
+  return getReviewThread(input.threadId)
+}
+
 export async function setReviewThreadStatus(
   threadId: string,
   status: 'open' | 'resolved' | 'outdated',

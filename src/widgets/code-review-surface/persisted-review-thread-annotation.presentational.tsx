@@ -11,6 +11,7 @@ import {
   Wrench,
   X,
 } from 'lucide-react'
+import { reviewThreadAnchors } from '@/entities/review-thread'
 import { AnimatedStatus } from '@/shared/ui/animated-status'
 import { Badge } from '@/shared/ui/badge'
 import { Button } from '@/shared/ui/button'
@@ -31,20 +32,10 @@ export function PersistedReviewThreadAnnotation({
 }) {
   const { thread } = annotation
   const isDiscussion = annotation.variant === 'discussion'
-  // A discussion references its primary anchor plus every pinned selection.
-  const referenceAnchors = isDiscussion
-    ? [
-        {
-          anchorCommitSha: thread.anchorCommitSha,
-          excerpt: thread.excerpt,
-          filePath: thread.filePath,
-          lineEnd: thread.lineEnd,
-          lineStart: thread.lineStart,
-          side: thread.side,
-        },
-        ...(thread.extraAnchors ?? []),
-      ]
-    : []
+  // A discussion references every selection in its anchor set (primary, when
+  // real, plus any attached later). A general discussion has none.
+  const referenceAnchors = isDiscussion ? reviewThreadAnchors(thread) : []
+  const isAnchorlessDiscussion = isDiscussion && referenceAnchors.length === 0
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -108,7 +99,14 @@ export function PersistedReviewThreadAnnotation({
           {thread.status === 'resolved' ? 'Reopen' : 'Resolve'}
         </Button>
       </div>
-      {isDiscussion ? (
+      {isAnchorlessDiscussion ? (
+        <div className="border-b border-[var(--border)] px-3 py-2">
+          <p className="text-[11px] font-medium text-[var(--muted)]">
+            Whole pull request — the agent has full context. Pin a selection in
+            the diff to attach it here.
+          </p>
+        </div>
+      ) : isDiscussion ? (
         <div className="grid gap-1 border-b border-[var(--border)] px-3 py-2">
           <p className="text-[11px] font-medium text-[var(--muted)]">
             References {referenceAnchors.length} selection
@@ -284,16 +282,20 @@ export function PersistedReviewThreadAnnotation({
           <p className="text-[var(--danger)]">{annotation.error}</p>
         ) : null}
         <div className="flex justify-end gap-2">
-          <Button
-            disabled={annotation.isAskingFix || annotation.isAskingAgent}
-            onClick={annotation.onAskFix}
-            size="sm"
-            type="button"
-            variant="ghost"
-          >
-            <Wrench aria-hidden="true" className="size-3.5" />
-            {annotation.isAskingFix ? 'Asking fix' : 'Ask to fix'}
-          </Button>
+          {/* A general (anchorless) discussion is Q&A only — no fix flow until
+              it references concrete code. */}
+          {isAnchorlessDiscussion ? null : (
+            <Button
+              disabled={annotation.isAskingFix || annotation.isAskingAgent}
+              onClick={annotation.onAskFix}
+              size="sm"
+              type="button"
+              variant="ghost"
+            >
+              <Wrench aria-hidden="true" className="size-3.5" />
+              {annotation.isAskingFix ? 'Asking fix' : 'Ask to fix'}
+            </Button>
+          )}
           <Button
             disabled={
               annotation.isAskingAgent ||

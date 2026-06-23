@@ -1,4 +1,5 @@
 import type {
+  AttachReviewThreadAnchorsInput,
   CreateReviewThreadInput,
   ListReviewThreadsParams,
   ReviewThread,
@@ -109,6 +110,29 @@ export async function updateReviewThreadStatus(input: {
   }
 
   return body.thread
+}
+
+/**
+ * Attaches one or more diff selections to an existing discussion. The selections
+ * are appended to the thread's reference set and ground the next agent turn; the
+ * full updated thread (with comments) is returned so the UI can replace it.
+ */
+export async function attachReviewThreadAnchors(
+  input: AttachReviewThreadAnchorsInput,
+): Promise<ReviewThread> {
+  const response = await fetch(
+    `/api/review-threads/${encodeURIComponent(input.threadId)}`,
+    {
+      body: JSON.stringify({ attachAnchors: input.anchors }),
+      headers: { 'Content-Type': 'application/json' },
+      method: 'PATCH',
+    },
+  )
+
+  return readReviewThreadResult(
+    response,
+    `Attaching the selection failed with HTTP ${response.status}.`,
+  )
 }
 
 /**
