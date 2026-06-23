@@ -22,8 +22,10 @@ import {
   ensurePullRequestReviewAgentSession,
   PullRequestReviewAgentSessionError,
 } from './pr-review-agent-session.service'
+import { reviewThreadAnchors } from '@/entities/review-thread'
 import {
   buildReviewThreadAgentFixPrompt,
+  buildReviewThreadAgentGeneralQuestionPrompt,
   buildReviewThreadAgentQuestionPrompt,
   extractAgentReplyAfterLastUserMessage,
 } from './pr-review-agent-session.pure'
@@ -513,6 +515,11 @@ async function claimAndSendQuestion(params: {
       body: comment.body,
     }))
 
+  // The unified anchor list folds the primary anchor (when real) and any
+  // attached selections into one ordered set. A general discussion has none, so
+  // it gets the whole-PR prompt; otherwise the first anchor leads.
+  const anchors = reviewThreadAnchors(thread)
+
   try {
     await client.sendExecutionSessionMessage({
       sessionId: snapshot.sessionId,
@@ -523,12 +530,17 @@ async function claimAndSendQuestion(params: {
               history,
               instruction: latest ?? '',
             })
-          : buildReviewThreadAgentQuestionPrompt({
-              anchor: thread,
-              additionalAnchors: thread.extraAnchors ?? undefined,
-              history,
-              question: latest ?? '',
-            }),
+          : anchors.length === 0
+            ? buildReviewThreadAgentGeneralQuestionPrompt({
+                history,
+                question: latest ?? '',
+              })
+            : buildReviewThreadAgentQuestionPrompt({
+                anchor: anchors[0],
+                additionalAnchors: anchors.slice(1),
+                history,
+                question: latest ?? '',
+              }),
     })
   } catch (error) {
     await updateReviewThreadComment({

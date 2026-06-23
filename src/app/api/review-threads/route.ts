@@ -68,27 +68,36 @@ export async function POST(request: Request) {
     body?: unknown
   }
 
-  if (
-    typeof input.owner !== 'string' ||
-    !input.owner.trim() ||
-    typeof input.repo !== 'string' ||
-    !input.repo.trim() ||
-    !Number.isInteger(input.number) ||
-    typeof input.anchorCommitSha !== 'string' ||
-    !input.anchorCommitSha.trim() ||
-    typeof input.filePath !== 'string' ||
-    !input.filePath.trim() ||
-    (input.side !== 'old' && input.side !== 'new') ||
-    !Number.isInteger(input.lineStart) ||
-    !Number.isInteger(input.lineEnd) ||
-    typeof input.excerpt !== 'string' ||
-    typeof input.body !== 'string' ||
-    !input.body.trim()
-  ) {
+  // A general discussion can be started with no line anchor; the anchor columns
+  // are only required for line-anchored (inline) threads. Either way owner,
+  // repo, number, anchorCommitSha and a non-empty body are required.
+  const isDiscussion = input.kind === 'discussion'
+
+  const baseValid =
+    typeof input.owner === 'string' &&
+    Boolean(input.owner.trim()) &&
+    typeof input.repo === 'string' &&
+    Boolean(input.repo.trim()) &&
+    Number.isInteger(input.number) &&
+    typeof input.anchorCommitSha === 'string' &&
+    Boolean(input.anchorCommitSha.trim()) &&
+    typeof input.body === 'string' &&
+    Boolean(input.body.trim())
+
+  const anchorValid =
+    typeof input.filePath === 'string' &&
+    Boolean(input.filePath.trim()) &&
+    (input.side === 'old' || input.side === 'new') &&
+    Number.isInteger(input.lineStart) &&
+    Number.isInteger(input.lineEnd) &&
+    typeof input.excerpt === 'string'
+
+  if (!baseValid || (!isDiscussion && !anchorValid)) {
     return NextResponse.json(
       {
-        error:
-          'owner, repo, number, anchorCommitSha, filePath, side (old|new), lineStart, lineEnd, excerpt and a non-empty body are required.',
+        error: isDiscussion
+          ? 'owner, repo, number, anchorCommitSha and a non-empty body are required.'
+          : 'owner, repo, number, anchorCommitSha, filePath, side (old|new), lineStart, lineEnd, excerpt and a non-empty body are required.',
       },
       { status: 400 },
     )
@@ -109,23 +118,27 @@ export async function POST(request: Request) {
   })
 
   const thread = await createReviewThread({
-    owner: input.owner,
-    repo: input.repo,
+    owner: input.owner as string,
+    repo: input.repo as string,
     pullRequestNumber: input.number as number,
     anchorSnapshotId:
       typeof input.anchorSnapshotId === 'string' && input.anchorSnapshotId
         ? input.anchorSnapshotId
         : null,
-    anchorCommitSha: input.anchorCommitSha,
-    filePath: input.filePath,
-    side: input.side,
-    lineStart: input.lineStart as number,
-    lineEnd: input.lineEnd as number,
-    excerpt: input.excerpt,
+    anchorCommitSha: input.anchorCommitSha as string,
+    // Anchorless discussions store empty sentinel anchor columns; the real
+    // selection set (if any) lives in extraAnchors.
+    filePath: typeof input.filePath === 'string' ? input.filePath : '',
+    side: input.side === 'old' ? 'old' : 'new',
+    lineStart: Number.isInteger(input.lineStart)
+      ? (input.lineStart as number)
+      : 0,
+    lineEnd: Number.isInteger(input.lineEnd) ? (input.lineEnd as number) : 0,
+    excerpt: typeof input.excerpt === 'string' ? input.excerpt : '',
     extraAnchors: parseReviewThreadExtraAnchors(input.extraAnchors),
-    kind: input.kind === 'discussion' ? 'discussion' : 'inline',
+    kind: isDiscussion ? 'discussion' : 'inline',
     createdByUserId: user.id,
-    body: input.body,
+    body: input.body as string,
   })
 
   return NextResponse.json({ thread }, { status: 201 })

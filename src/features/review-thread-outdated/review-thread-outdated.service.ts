@@ -31,8 +31,12 @@ export async function markOutdatedReviewThreadsForSnapshot(input: {
     pullRequestNumber: snapshot.number,
     repo: snapshot.repo,
   })
+  // Discussions are whole-PR conversations, not line-anchored notes — a new
+  // push never makes them "outdated". Only inline threads are candidates.
   const candidates = threads.filter(
-    (thread) => thread.anchorCommitSha !== snapshot.headSha,
+    (thread) =>
+      thread.kind !== 'discussion' &&
+      thread.anchorCommitSha !== snapshot.headSha,
   )
 
   if (candidates.length === 0) {

@@ -41,6 +41,7 @@ function thread(input: {
   anchorSnapshotId?: string | null
   filePath?: string
   id: string
+  kind?: 'inline' | 'discussion'
 }) {
   return {
     anchorCommitSha: input.anchorCommitSha ?? 'head-1',
@@ -48,6 +49,7 @@ function thread(input: {
       input.anchorSnapshotId === undefined ? 'snap-1' : input.anchorSnapshotId,
     filePath: input.filePath ?? 'src/a.ts',
     id: input.id,
+    kind: input.kind ?? 'inline',
     status: 'open',
   } as never
 }
@@ -102,6 +104,20 @@ describe('markOutdatedReviewThreadsForSnapshot', () => {
   it('does nothing when every open thread anchors the new head', async () => {
     mockedListThreads.mockResolvedValue([
       thread({ id: 'thread-current', anchorCommitSha: 'head-2' }),
+    ])
+
+    const result = await markOutdatedReviewThreadsForSnapshot({
+      snapshotId: 'snap-2',
+    })
+
+    expect(result.outdatedThreadIds).toEqual([])
+    expect(mockedListPatches).not.toHaveBeenCalled()
+    expect(mockedSetStatus).not.toHaveBeenCalled()
+  })
+
+  it('never marks discussions outdated, even on an older head', async () => {
+    mockedListThreads.mockResolvedValue([
+      thread({ id: 'discussion-1', kind: 'discussion' }),
     ])
 
     const result = await markOutdatedReviewThreadsForSnapshot({

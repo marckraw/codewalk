@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server'
 import { getCurrentCodewalkUser } from '@/entities/auth-server'
-import { setReviewThreadStatus } from '@/entities/database'
+import {
+  appendReviewThreadAnchors,
+  setReviewThreadStatus,
+} from '@/entities/database'
+import { parseReviewThreadExtraAnchors } from '@/entities/review-thread'
 
 export const runtime = 'nodejs'
 
@@ -21,8 +25,23 @@ export async function PATCH(request: Request, context: RouteContext) {
     )
   }
 
-  const status = (body as { status?: unknown }).status
-  if (status !== 'open' && status !== 'resolved') {
+  const payload = body as { attachAnchors?: unknown; status?: unknown }
+  const isAttach = payload.attachAnchors !== undefined
+
+  // Attaching selections and updating status are validated against different
+  // shapes; pick the one the request carries.
+  const anchors = isAttach
+    ? parseReviewThreadExtraAnchors(payload.attachAnchors)
+    : []
+
+  if (isAttach) {
+    if (anchors.length === 0) {
+      return NextResponse.json(
+        { error: 'attachAnchors must include at least one valid selection.' },
+        { status: 400 },
+      )
+    }
+  } else if (payload.status !== 'open' && payload.status !== 'resolved') {
     return NextResponse.json(
       { error: 'status must be "open" or "resolved".' },
       { status: 400 },
@@ -45,7 +64,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     )
   }
 
-  const thread = await setReviewThreadStatus(threadId, status)
+  const thread = isAttach
+    ? await appendReviewThreadAnchors({ anchors, threadId })
+    : await setReviewThreadStatus(
+        threadId,
+        payload.status as 'open' | 'resolved',
+      )
+
   if (!thread) {
     return NextResponse.json(
       { error: 'Review thread was not found.' },

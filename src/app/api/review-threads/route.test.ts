@@ -108,4 +108,44 @@ describe('/api/review-threads', () => {
       }),
     )
   })
+
+  it('creates an anchorless discussion with sentinel anchor columns', async () => {
+    const response = await POST(
+      postRequest({
+        owner: 'ef-global',
+        repo: 'backpack',
+        number: 42,
+        anchorSnapshotId: 'snap-1',
+        anchorCommitSha: 'abc123',
+        kind: 'discussion',
+        body: "What's the riskiest change here?",
+      }),
+    )
+    expect(response.status).toBe(201)
+    expect(createReviewThread).toHaveBeenCalledWith(
+      expect.objectContaining({
+        kind: 'discussion',
+        filePath: '',
+        excerpt: '',
+        lineStart: 0,
+        lineEnd: 0,
+        body: "What's the riskiest change here?",
+      }),
+    )
+  })
+
+  it('still requires an anchor for an inline thread', async () => {
+    const response = await POST(
+      postRequest({
+        owner: 'ef-global',
+        repo: 'backpack',
+        number: 42,
+        anchorSnapshotId: 'snap-1',
+        anchorCommitSha: 'abc123',
+        body: 'Why is this constant?',
+      }),
+    )
+    expect(response.status).toBe(400)
+    expect(createReviewThread).not.toHaveBeenCalled()
+  })
 })

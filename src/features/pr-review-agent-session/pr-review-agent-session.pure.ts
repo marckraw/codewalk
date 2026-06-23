@@ -130,6 +130,41 @@ export function buildReviewThreadAgentQuestionPrompt(input: {
 }
 
 /**
+ * The follow-up sent for a general discussion question — a whole-PR
+ * conversation with no line anchor. The PR identity and guide context were
+ * already established in the session's initial prompt, so this only carries the
+ * thread history and the new question. Like the anchored question, it forbids
+ * file changes: a discussion is for talking, not editing.
+ */
+export function buildReviewThreadAgentGeneralQuestionPrompt(input: {
+  history: ReviewAgentThreadHistoryEntry[]
+  question: string
+}) {
+  const historyLines =
+    input.history.length > 0
+      ? [
+          'Earlier comments in this thread:',
+          ...input.history.map(
+            (entry) =>
+              `${entry.authorType === 'agent' ? 'Agent' : 'Reviewer'}: ${entry.body}`,
+          ),
+          '',
+        ]
+      : []
+
+  return [
+    'A reviewer asked a general question about this pull request, not anchored',
+    'to any specific lines. Use the repository checkout and the pull request',
+    'context from the start of this session to answer.',
+    '',
+    ...historyLines,
+    `Question: ${input.question}`,
+    '',
+    'Answer concisely with concrete file references. Do not modify any files.',
+  ].join('\n')
+}
+
+/**
  * The follow-up sent when a reviewer asks the agent to implement the change
  * discussed in the thread. The agent commits locally in its workspace but must
  * NOT push — publishing to the PR branch is a separate, explicitly-confirmed
