@@ -155,12 +155,53 @@ export type AgentsDaemonExecutionSessionStatus =
   | 'completed'
   | 'failed'
 
+export type AgentsDaemonExecutionMetadataAttributes = Record<string, unknown>
+
+export type AgentsDaemonExecutionSessionMetadata = {
+  source?: {
+    attributes?: AgentsDaemonExecutionMetadataAttributes
+    id?: string | null
+    kind?: string | null
+    surface: string
+    url?: string | null
+  }
+  user?: {
+    attributes?: AgentsDaemonExecutionMetadataAttributes
+    displayName?: string | null
+    id: string
+    platformUserId?: string | null
+    username?: string | null
+  }
+  thread?: {
+    attributes?: AgentsDaemonExecutionMetadataAttributes
+    channelId?: string | null
+    conversationId?: string | null
+    id: string
+    messageId?: string | null
+    rootMessageId?: string | null
+    url?: string | null
+  }
+  workspace?: {
+    attributes?: AgentsDaemonExecutionMetadataAttributes
+    branchName?: string | null
+    id: string
+    name?: string | null
+    organizationId?: string | null
+    pullRequestNumber?: number | null
+    ref?: string | null
+    repository?: string | null
+    tenantId?: string | null
+  }
+  attributes?: AgentsDaemonExecutionMetadataAttributes
+}
+
 export type AgentsDaemonExecutionStartInput = {
   automationMode?: boolean
   callback?: { secret: string; url: string }
   continuationToken?: string | null
   effort?: string | null
   initialMessage: string
+  metadata?: AgentsDaemonExecutionSessionMetadata | null
   model: string | null
   providerId: string
   sessionId: string
@@ -174,6 +215,7 @@ export type AgentsDaemonExecutionStartInput = {
 export type AgentsDaemonExecutionStartRequestBody = {
   protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
   providerId: string
+  metadata?: AgentsDaemonExecutionSessionMetadata | null
   config: {
     automationMode?: boolean
     continuationToken: string | null
@@ -257,6 +299,7 @@ export type AgentsDaemonExecutionSessionSnapshot = {
   contextWindow: unknown | null
   conversation: unknown[]
   lastSeq: number
+  metadata?: AgentsDaemonExecutionSessionMetadata | null
   workspace: {
     baseRef: string
     branchName: string
@@ -408,6 +451,7 @@ export function buildAgentsDaemonExecutionStartRequestBody(
     ...(input.callback
       ? { callback: { secret: input.callback.secret, url: input.callback.url } }
       : {}),
+    ...(input.metadata ? { metadata: input.metadata } : {}),
     protocolVersion: EXECUTION_PROTOCOL_VERSION,
     providerId,
   }
@@ -532,6 +576,7 @@ export function parseAgentsDaemonExecutionSessionSnapshot(
 ): AgentsDaemonExecutionSessionSnapshot {
   const obj = requiredRecord(value, 'execution session snapshot')
   const protocolVersion = requireNumber(obj.protocolVersion, 'protocolVersion')
+  const metadata = parseExecutionSessionMetadata(obj.metadata)
 
   if (protocolVersion !== EXECUTION_PROTOCOL_VERSION) {
     throw new Error(
@@ -547,6 +592,7 @@ export function parseAgentsDaemonExecutionSessionSnapshot(
       typeof obj.continuationToken === 'string' ? obj.continuationToken : null,
     conversation: Array.isArray(obj.conversation) ? obj.conversation : [],
     lastSeq: requireNumber(obj.lastSeq, 'lastSeq'),
+    ...(metadata !== undefined ? { metadata } : {}),
     prUrl: typeof obj.prUrl === 'string' ? obj.prUrl : null,
     protocolVersion,
     providerId: requireString(obj.providerId, 'providerId'),
@@ -610,6 +656,22 @@ function parseExecutionSessionStatus(
   }
 
   throw new Error('Invalid execution session status')
+}
+
+function parseExecutionSessionMetadata(
+  value: unknown,
+): AgentsDaemonExecutionSessionMetadata | null | undefined {
+  if (value === undefined) {
+    return undefined
+  }
+  if (value === null) {
+    return null
+  }
+  if (isPlainRecord(value)) {
+    return value as AgentsDaemonExecutionSessionMetadata
+  }
+
+  return undefined
 }
 
 function parseExecutionWorkspaceSnapshot(
@@ -974,6 +1036,10 @@ function requiredRecord(
   }
 
   throw new Error(`Invalid ${field}`)
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 function requireString(value: unknown, field: string): string {

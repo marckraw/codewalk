@@ -6,6 +6,7 @@ import {
   AgentsDaemonClientError,
   getAgentsDaemonConfig,
   type AgentsDaemonConfigResult,
+  type AgentsDaemonExecutionSessionMetadata,
   type AgentsDaemonExecutionSessionSnapshot,
 } from '@/entities/agents-daemon'
 import {
@@ -190,6 +191,10 @@ async function startRemoteReviewAgentSession(input: {
         input.snapshot,
         await loadGuideContextForBootPrompt(input.snapshot.id),
       ),
+      metadata: buildReviewAgentExecutionMetadata({
+        requestedByUserId: input.requestedByUserId,
+        snapshot: input.snapshot,
+      }),
       model: input.config.config.defaultModel,
       providerId: input.config.config.defaultProvider,
       sessionId: daemonSessionId,
@@ -224,6 +229,51 @@ async function startRemoteReviewAgentSession(input: {
     }
   } catch (error) {
     throw toReviewAgentSessionError(error)
+  }
+}
+
+function buildReviewAgentExecutionMetadata(input: {
+  requestedByUserId: string | null
+  snapshot: PullRequestSnapshotRow
+}): AgentsDaemonExecutionSessionMetadata {
+  const repository = buildRepositoryUrlFromSnapshot(input.snapshot)
+  const threadId = [
+    input.snapshot.owner,
+    input.snapshot.repo,
+    `pull-${input.snapshot.number}`,
+  ].join('/')
+
+  return {
+    attributes: {
+      snapshotId: input.snapshot.id,
+    },
+    source: {
+      id: `codewalk:${threadId}`,
+      kind: 'pull-request-review',
+      surface: 'codewalk',
+    },
+    thread: {
+      conversationId: threadId,
+      id: threadId,
+      url: input.snapshot.url,
+    },
+    ...(input.requestedByUserId
+      ? {
+          user: {
+            id: input.requestedByUserId,
+          },
+        }
+      : {}),
+    workspace: {
+      attributes: {
+        baseRef: input.snapshot.baseRef,
+        headRef: input.snapshot.headRef,
+      },
+      id: `${input.snapshot.owner}/${input.snapshot.repo}`,
+      pullRequestNumber: input.snapshot.number,
+      ref: input.snapshot.headSha,
+      repository,
+    },
   }
 }
 

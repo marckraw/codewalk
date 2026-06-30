@@ -183,6 +183,20 @@ describe('agents-daemon protocol', () => {
         continuationToken: ' thread-1 ',
         effort: ' high ',
         initialMessage: ' Ready? ',
+        metadata: {
+          source: { kind: 'pull-request-review', surface: 'codewalk' },
+          thread: {
+            conversationId: 'ef-global/example/pull-42',
+            id: 'ef-global/example/pull-42',
+          },
+          user: { id: 'user-1' },
+          workspace: {
+            id: 'ef-global/example',
+            pullRequestNumber: 42,
+            ref: 'head-sha',
+            repository: 'https://github.com/ef-global/example',
+          },
+        },
         model: ' gpt-5.5 ',
         providerId: ' codex ',
         sessionId: ' session-1 ',
@@ -199,6 +213,20 @@ describe('agents-daemon protocol', () => {
         model: 'gpt-5.5',
         sessionId: 'session-1',
         workingDirectory: '/tmp',
+      },
+      metadata: {
+        source: { kind: 'pull-request-review', surface: 'codewalk' },
+        thread: {
+          conversationId: 'ef-global/example/pull-42',
+          id: 'ef-global/example/pull-42',
+        },
+        user: { id: 'user-1' },
+        workspace: {
+          id: 'ef-global/example',
+          pullRequestNumber: 42,
+          ref: 'head-sha',
+          repository: 'https://github.com/ef-global/example',
+        },
       },
       protocolVersion: 1,
       providerId: 'codex',

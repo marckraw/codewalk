@@ -89,6 +89,34 @@ describe('ensurePullRequestReviewAgentSession', () => {
     expect(client.startExecutionSession).toHaveBeenCalledWith(
       expect.objectContaining({
         continuationToken: null,
+        metadata: {
+          attributes: {
+            snapshotId: 'snapshot-1',
+          },
+          source: {
+            id: 'codewalk:ef-global/backpack/pull-42',
+            kind: 'pull-request-review',
+            surface: 'codewalk',
+          },
+          thread: {
+            conversationId: 'ef-global/backpack/pull-42',
+            id: 'ef-global/backpack/pull-42',
+            url: 'https://github.com/ef-global/backpack/pull/42',
+          },
+          user: {
+            id: 'user-1',
+          },
+          workspace: {
+            attributes: {
+              baseRef: 'main',
+              headRef: 'feature',
+            },
+            id: 'ef-global/backpack',
+            pullRequestNumber: 42,
+            ref: 'head-sha',
+            repository: 'https://github.com/ef-global/backpack',
+          },
+        },
         model: 'gpt-5.5',
         providerId: 'codex',
         workspace: {
