@@ -292,6 +292,7 @@ export type AgentsDaemonExecutionSessionSnapshot = {
   protocolVersion: typeof EXECUTION_PROTOCOL_VERSION
   sessionId: string
   providerId: string
+  commandable: boolean
   status: AgentsDaemonExecutionSessionStatus
   attention: string
   activity: string | null
@@ -596,6 +597,7 @@ export function parseAgentsDaemonExecutionSessionSnapshot(
     prUrl: typeof obj.prUrl === 'string' ? obj.prUrl : null,
     protocolVersion,
     providerId: requireString(obj.providerId, 'providerId'),
+    commandable: typeof obj.commandable === 'boolean' ? obj.commandable : true,
     sessionId: requireString(obj.sessionId, 'sessionId'),
     status: parseExecutionSessionStatus(obj.status),
     workspace: parseExecutionWorkspaceSnapshot(obj.workspace),
