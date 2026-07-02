@@ -246,6 +246,19 @@ describe('agents-daemon protocol', () => {
     expect(
       parseAgentsDaemonExecutionSessionSnapshot(executionSnapshot),
     ).toEqual(executionSnapshot)
+
+    expect(
+      parseAgentsDaemonExecutionSessionSnapshot({
+        ...executionSnapshot,
+        commandable: false,
+      }).commandable,
+    ).toBe(false)
+    expect(
+      parseAgentsDaemonExecutionSessionSnapshot({
+        ...executionSnapshot,
+        commandable: undefined,
+      }).commandable,
+    ).toBe(true)
   })
 
   it('builds send-message command envelopes and parses command results', () => {
@@ -412,6 +425,7 @@ const metaPayload = {
 const executionSnapshot = {
   activity: null,
   attention: 'none',
+  commandable: true,
   contextWindow: null,
   continuationToken: 'thread-1',
   conversation: [],

@@ -120,6 +120,7 @@ const sessionRow = {
 } as never
 
 function daemonSnapshot(input: {
+  commandable?: boolean
   conversation?: unknown[]
   lastSeq?: number
   status?: 'idle' | 'running' | 'completed' | 'failed'
@@ -127,6 +128,7 @@ function daemonSnapshot(input: {
   return {
     activity: null,
     attention: 'none',
+    commandable: input.commandable ?? true,
     contextWindow: null,
     continuationToken: 'cont-1',
     conversation: input.conversation ?? [],
@@ -382,6 +384,22 @@ describe('review agent reply state machine', () => {
 
     await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
 
+    expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
+      expect.objectContaining({ agentState: 'error', commentId: 'comment-2' }),
+    )
+  })
+
+  it('advance errors pending comments when the daemon snapshot is not commandable', async () => {
+    mockedGetReviewThread.mockResolvedValue(
+      makeThread([questionComment, pendingUnsent]),
+    )
+    const client = makeClient([
+      daemonSnapshot({ commandable: false, status: 'completed' }),
+    ])
+
+    await advancePullRequestReviewAgentReply({ client, threadId: 'thread-1' })
+
+    expect(client.sendExecutionSessionMessage).not.toHaveBeenCalled()
     expect(mockedUpdateReviewThreadComment).toHaveBeenCalledWith(
       expect.objectContaining({ agentState: 'error', commentId: 'comment-2' }),
     )

@@ -203,6 +203,39 @@ describe('ensurePullRequestReviewAgentSession', () => {
     )
   })
 
+  it('recreates a persisted daemon session that is no longer commandable', async () => {
+    mockedGetReviewAgentSessionForPullRequest.mockResolvedValue({
+      ...storedSession,
+      continuationToken: 'thread-old',
+    })
+    const client = {
+      getExecutionSession: vi
+        .fn()
+        .mockResolvedValueOnce({ ...daemonSnapshot, commandable: false })
+        .mockResolvedValueOnce(daemonSnapshot),
+      startExecutionSession: vi
+        .fn()
+        .mockResolvedValue({ protocolVersion: 1, sessionId: 'daemon-2' }),
+    }
+
+    await expect(
+      ensurePullRequestReviewAgentSession({
+        client,
+        requestedByUserId: 'user-1',
+        snapshotId: 'snapshot-1',
+      }),
+    ).resolves.toMatchObject({
+      action: 'recreated',
+      session: updatedSession,
+    })
+
+    expect(client.startExecutionSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        continuationToken: 'thread-old',
+      }),
+    )
+  })
+
   it('recreates the session at the latest head when the PR moved', async () => {
     mockedGetReviewAgentSessionForPullRequest.mockResolvedValue({
       ...storedSession,
@@ -286,6 +319,20 @@ describe('ensurePullRequestReviewAgentSession', () => {
         repo: 'backpack',
       }),
     ).resolves.toEqual({ activity: null, state: 'lost' })
+
+    await expect(
+      getPullRequestReviewAgentSessionStatus({
+        client: {
+          getExecutionSession: vi.fn().mockResolvedValue({
+            ...daemonSnapshot,
+            commandable: false,
+          }),
+        },
+        owner: 'ef-global',
+        pullRequestNumber: 42,
+        repo: 'backpack',
+      }),
+    ).resolves.toEqual({ activity: null, state: 'lost' })
   })
 })
 
@@ -322,6 +369,7 @@ const updatedSession = {
 const daemonSnapshot = {
   activity: null,
   attention: 'none',
+  commandable: true,
   contextWindow: null,
   continuationToken: 'thread-1',
   conversation: [],

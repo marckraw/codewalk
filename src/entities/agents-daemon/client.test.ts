@@ -405,6 +405,7 @@ const metaPayload = {
 const executionSnapshot = {
   activity: null,
   attention: 'none',
+  commandable: true,
   contextWindow: null,
   continuationToken: 'thread-1',
   conversation: [],

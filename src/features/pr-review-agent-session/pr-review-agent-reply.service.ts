@@ -424,6 +424,14 @@ export async function advancePullRequestReviewAgentReply(input: {
     throw toReplyError(error)
   }
 
+  if (!snapshot.commandable) {
+    await failPendingAgentComments(
+      thread.id,
+      'The agent session was restored from history but is no longer live. Ask the agent again.',
+    )
+    return refreshedThread(thread.id)
+  }
+
   if (snapshot.status === 'failed') {
     await failPendingAgentComments(
       thread.id,

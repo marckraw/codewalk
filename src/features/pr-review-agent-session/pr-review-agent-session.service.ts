@@ -138,6 +138,11 @@ async function tryReuseExistingReviewAgentSession(
     const daemonSnapshot = await client.getExecutionSession(
       existing.daemonSessionId,
     )
+
+    if (!daemonSnapshot.commandable) {
+      return null
+    }
+
     const session = await updateStoredReviewAgentSessionFromDaemonSnapshot({
       daemonSnapshot,
       session: existing,
@@ -333,6 +338,9 @@ export async function getPullRequestReviewAgentSessionStatus(input: {
 
   try {
     const snapshot = await client.getExecutionSession(existing.daemonSessionId)
+    if (!snapshot.commandable) {
+      return { activity: null, state: 'lost' }
+    }
     return { activity: snapshot.activity, state: snapshot.status }
   } catch (error) {
     if (isMissingExecutionSessionError(error)) {
